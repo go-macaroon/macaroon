@@ -1,3 +1,10 @@
+// The macaroon package implements macaroons as described in
+// the paper "Macaroons: Cookies with Contextual Caveats for
+// Decentralized Authorization in the Cloud"
+// (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
+//
+// It still in its very early stages, having no support for serialisation
+// and only rudimentary test coverage.
 package macaroon
 import (
 	"bytes"
