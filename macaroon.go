@@ -6,12 +6,14 @@
 // It still in its very early stages, having no support for serialisation
 // and only rudimentary test coverage.
 package macaroon
+
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"crypto/sha256"
-	"crypto/hmac"
 )
 
 // Macaroon holds a macaroon.
@@ -26,11 +28,49 @@ type Macaroon struct {
 	sig      []byte
 }
 
+type macaroonJSON struct {
+	Caveats    []caveatJSON `json:"caveats"`
+	Location   string       `json:"location"`
+	Identifier string       `json:"identifier"`
+	Signature  string       `json:"signature"` // hex-encoded
+}
+
 // Caveat holds a first person or third party caveat.
 type Caveat struct {
 	location       string
 	caveatId       []byte
 	verificationId []byte
+}
+
+type caveatJSON struct {
+	Location string `json:"location"`
+	CID      string `json:"cid"`
+	VID      string `json:"vid"`
+}
+
+// MarshalJSON returns a json representation of a caveat.
+func (cav *Caveat) MarshalJSON() ([]byte, error) {
+	cavjson := caveatJSON{Location: cav.location}
+	cavjson.CID = base64.StdEncoding.EncodeToString(cav.caveatId)
+	cavjson.VID = base64.StdEncoding.EncodeToString(cav.verificationId)
+	return json.Marshal(cavjson)
+}
+
+// UnmarshalJSON returns a Caeat from a json representation.
+func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
+	var err error
+	cavjson := caveatJSON{}
+	json.Unmarshal(jsonData, &cavjson)
+	cav.location = cavjson.Location
+	cav.caveatId, err = base64.StdEncoding.DecodeString(cavjson.CID)
+	if err != nil {
+		return err
+	}
+	cav.verificationId, err = base64.StdEncoding.DecodeString(cavjson.VID)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // IsThirdParty reports whether the caveat must be satisfied
@@ -44,7 +84,7 @@ func (cav *Caveat) IsThirdParty() bool {
 func New(rootKey, id []byte, loc string) *Macaroon {
 	m := &Macaroon{
 		location: loc,
-		id: []byte(id),
+		id:       []byte(id),
 	}
 	m.sig = keyedHash(rootKey, m.id)
 	return m
@@ -77,8 +117,8 @@ func (m *Macaroon) Signature() []byte {
 
 func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) {
 	m.caveats = append(m.caveats, Caveat{
-		location: loc,
-		caveatId: caveatId,
+		location:       loc,
+		caveatId:       caveatId,
 		verificationId: verificationId,
 	})
 	sig := keyedHasher(m.sig)
@@ -104,7 +144,7 @@ func (m *Macaroon) AddFirstPartyCaveat(caveat string) {
 // a third-party caveat id.
 type ThirdPartyCaveatId struct {
 	RootKey []byte
-	Caveat string
+	Caveat  string
 }
 
 // DecryptThirdPartyCaveatId decrypts a third-party caveat
@@ -209,6 +249,47 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 		return false, fmt.Errorf("signature mismatch after caveat verification")
 	}
 	return true, nil
+}
+
+// MarshalJSON Returns a json representation of a macaroon.
+func (m *Macaroon) MarshalJSON() ([]byte, error) {
+	mjson := macaroonJSON{}
+	mjson.Location = m.Location()
+	mjson.Identifier = base64.StdEncoding.EncodeToString(m.Id())
+	mjson.Signature = base64.StdEncoding.EncodeToString(m.Signature())
+	for _, cav := range m.caveats {
+		cavjson := caveatJSON{
+			Location: cav.location,
+			CID:      base64.StdEncoding.EncodeToString(cav.caveatId),
+			VID:      base64.StdEncoding.EncodeToString(cav.verificationId)}
+		mjson.Caveats = append(mjson.Caveats, cavjson)
+	}
+	return json.Marshal(mjson)
+}
+
+// Unmarshaljson returns a macaroon from a json representation.
+func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
+	mjson := macaroonJSON{}
+	err := json.Unmarshal(jsonData, &mjson)
+	if err != nil {
+		return err
+	}
+	m.location = mjson.Location
+	m.id, err = base64.StdEncoding.DecodeString(mjson.Identifier)
+	if err != nil {
+		return err
+	}
+	m.sig, err = base64.StdEncoding.DecodeString(mjson.Signature)
+	if err != nil {
+		return err
+	}
+	for _, jsoncav := range mjson.Caveats {
+		cav := Caveat{location: jsoncav.Location}
+		cav.caveatId, err = base64.StdEncoding.DecodeString(jsoncav.CID)
+		cav.verificationId, err = base64.StdEncoding.DecodeString(jsoncav.VID)
+		m.caveats = append(m.caveats, cav)
+	}
+	return nil
 }
 
 type Verifier interface {
