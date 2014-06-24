@@ -11,7 +11,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 )
@@ -51,8 +51,8 @@ type caveatJSON struct {
 // Implement Marshaler
 func (cav *Caveat) MarshalJSON() ([]byte, error) {
 	cavJSON := caveatJSON{Location: cav.location}
-	cavJSON.CID = base64.StdEncoding.EncodeToString(cav.caveatId)
-	cavJSON.VID = base64.StdEncoding.EncodeToString(cav.verificationId)
+	cavJSON.CID = hex.EncodeToString(cav.caveatId)
+	cavJSON.VID = hex.EncodeToString(cav.verificationId)
 	data, err := json.Marshal(cavJSON)
 	if err != nil {
 		return nil, err
@@ -66,11 +66,11 @@ func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
 	cavJSON := caveatJSON{}
 	json.Unmarshal(jsonData, &cavJSON)
 	cav.location = cavJSON.Location
-	cav.caveatId, err = base64.StdEncoding.DecodeString(cavJSON.CID)
+	cav.caveatId, err = hex.DecodeString(cavJSON.CID)
 	if err != nil {
 		return err
 	}
-	cav.verificationId, err = base64.StdEncoding.DecodeString(cavJSON.VID)
+	cav.verificationId, err = hex.DecodeString(cavJSON.VID)
 	if err != nil {
 		return err
 	}
@@ -259,14 +259,14 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	mjson := macaroonJSON{}
 	mjson.Location = m.Location()
-	mjson.Identifier = base64.StdEncoding.EncodeToString(m.Id())
-	mjson.Signature = base64.StdEncoding.EncodeToString(m.Signature())
+	mjson.Identifier = hex.EncodeToString(m.Id())
+	mjson.Signature = hex.EncodeToString(m.Signature())
 	mjson.Caveats = make([]caveatJSON, 0, len(m.caveats))
 	for _, cav := range m.caveats {
 		cavJSON := caveatJSON{
 			Location: cav.location,
-			CID:      base64.StdEncoding.EncodeToString(cav.caveatId),
-			VID:      base64.StdEncoding.EncodeToString(cav.verificationId)}
+			CID:      hex.EncodeToString(cav.caveatId),
+			VID:      hex.EncodeToString(cav.verificationId)}
 		mjson.Caveats = append(mjson.Caveats, cavJSON)
 	}
 	data, err := json.Marshal(mjson)
@@ -284,18 +284,18 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 		return err
 	}
 	m.location = mjson.Location
-	m.id, err = base64.StdEncoding.DecodeString(mjson.Identifier)
+	m.id, err = hex.DecodeString(mjson.Identifier)
 	if err != nil {
 		return err
 	}
-	m.sig, err = base64.StdEncoding.DecodeString(mjson.Signature)
+	m.sig, err = hex.DecodeString(mjson.Signature)
 	if err != nil {
 		return err
 	}
 	for _, jsoncav := range mjson.Caveats {
 		cav := Caveat{location: jsoncav.Location}
-		cav.caveatId, err = base64.StdEncoding.DecodeString(jsoncav.CID)
-		cav.verificationId, err = base64.StdEncoding.DecodeString(jsoncav.VID)
+		cav.caveatId, err = hex.DecodeString(jsoncav.CID)
+		cav.verificationId, err = hex.DecodeString(jsoncav.VID)
 		m.caveats = append(m.caveats, cav)
 	}
 	return nil

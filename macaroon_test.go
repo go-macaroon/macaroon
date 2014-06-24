@@ -1,7 +1,7 @@
 package macaroon_test
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 
@@ -90,11 +90,11 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(m0.Location(), gc.Equals, m1.Location())
 	c.Assert(
-		base64.StdEncoding.EncodeToString(m0.Id()),
+		hex.EncodeToString(m0.Id()),
 		gc.Equals,
-		base64.StdEncoding.EncodeToString(m1.Id()))
+		hex.EncodeToString(m1.Id()))
 	c.Assert(
-		base64.StdEncoding.EncodeToString(m0.Signature()),
+		hex.EncodeToString(m0.Signature()),
 		gc.Equals,
-		base64.StdEncoding.EncodeToString(m1.Signature()))
+		hex.EncodeToString(m1.Signature()))
 }
