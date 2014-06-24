@@ -85,7 +85,7 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	m0.AddFirstPartyCaveat("account = 3735928559")
 	m0Json, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
-	m1 := macaroon.Macaroon{}
+	var m1 macaroon.Macaroon
 	err = json.Unmarshal(m0Json, &m1)
 	c.Assert(err, gc.IsNil)
 	c.Assert(m0.Location(), gc.Equals, m1.Location())

@@ -57,7 +57,7 @@ func (cav *Caveat) MarshalJSON() ([]byte, error) {
 	cavJSON.VID = hex.EncodeToString(cav.verificationId)
 	data, err := json.Marshal(cavJSON)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Cannot marshal json data: %v", err)
 	}
 	return data, nil
 }
@@ -70,11 +70,11 @@ func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
 	cav.location = cavJSON.Location
 	cav.caveatId, err = hex.DecodeString(cavJSON.CID)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot decode caveat id %q: %v.", cavJSON.CID, err)
 	}
 	cav.verificationId, err = hex.DecodeString(cavJSON.VID)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot decode verfification id %q: %v.", cavJSON.VID, err)
 	}
 	return nil
 }
@@ -259,11 +259,12 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 
 // MarshalJSON implements json.Marshaler.
 func (m *Macaroon) MarshalJSON() ([]byte, error) {
-	mjson := macaroonJSON{}
-	mjson.Location = m.Location()
-	mjson.Identifier = hex.EncodeToString(m.Id())
-	mjson.Signature = hex.EncodeToString(m.Signature())
-	mjson.Caveats = make([]caveatJSON, 0, len(m.caveats))
+	mjson := macaroonJSON{
+		Location:   m.Location(),
+		Identifier: hex.EncodeToString(m.id),
+		Signature:  hex.EncodeToString(m.sig),
+		Caveats:    make([]caveatJSON, 0, len(m.caveats)),
+	}
 	for _, cav := range m.caveats {
 		cavJSON := caveatJSON{
 			Location: cav.location,
@@ -273,7 +274,7 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	}
 	data, err := json.Marshal(mjson)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Cannot marshal json data: %v", err)
 	}
 	return data, nil
 }
@@ -283,16 +284,16 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	mjson := macaroonJSON{}
 	err := json.Unmarshal(jsonData, &mjson)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot unmarshal json data: %v", err)
 	}
 	m.location = mjson.Location
 	m.id, err = hex.DecodeString(mjson.Identifier)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot decode macaroon identifier %q: %v.", m.id, err)
 	}
 	m.sig, err = hex.DecodeString(mjson.Signature)
 	if err != nil {
-		return err
+		return fmt.Errorf("Cannot decode macaroon signature %q: %v.", m.sig, err)
 	}
 	for _, jsoncav := range mjson.Caveats {
 		cav := Caveat{location: jsoncav.Location}
