@@ -28,6 +28,7 @@ type Macaroon struct {
 	sig      []byte
 }
 
+// Utility struct for json marshaling.
 type macaroonJSON struct {
 	Caveats    []caveatJSON `json:"caveats"`
 	Location   string       `json:"location"`
@@ -42,13 +43,14 @@ type Caveat struct {
 	verificationId []byte
 }
 
+// Utility struct for json marshaling.
 type caveatJSON struct {
 	Location string `json:"location"`
 	CID      string `json:"cid"`
 	VID      string `json:"vid"`
 }
 
-// Implement Marshaler
+// MarshalJSON implements json.Marshaler.
 func (cav *Caveat) MarshalJSON() ([]byte, error) {
 	cavJSON := caveatJSON{Location: cav.location}
 	cavJSON.CID = hex.EncodeToString(cav.caveatId)
@@ -60,7 +62,7 @@ func (cav *Caveat) MarshalJSON() ([]byte, error) {
 	return data, nil
 }
 
-// Implement Unmarshaler
+// unmarshalJSON implements json.Unmarshaler.
 func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
 	var err error
 	cavJSON := caveatJSON{}
@@ -255,7 +257,7 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 	return true, nil
 }
 
-// Implement Marshaler
+// MarshalJSON implements json.Marshaler.
 func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	mjson := macaroonJSON{}
 	mjson.Location = m.Location()
@@ -276,7 +278,7 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	return data, nil
 }
 
-// Implement Unmarshaler
+// UnmarshalJSON implements json.Unmarshaler.
 func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	mjson := macaroonJSON{}
 	err := json.Unmarshal(jsonData, &mjson)
