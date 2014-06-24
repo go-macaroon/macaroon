@@ -3,7 +3,6 @@ package macaroon_test
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	_ "net/http"
@@ -98,9 +97,4 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 		base64.StdEncoding.EncodeToString(m0.Signature()),
 		gc.Equals,
 		base64.StdEncoding.EncodeToString(m1.Signature()))
-
-	fmt.Printf("%#v\n", *m0)
-	fmt.Printf("%s\n", string(m0Json))
-	fmt.Printf("%#v\n", m1)
-
 }

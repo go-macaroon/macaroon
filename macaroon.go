@@ -48,25 +48,29 @@ type caveatJSON struct {
 	VID      string `json:"vid"`
 }
 
-// MarshalJSON returns a json representation of a caveat.
+// Implement Marshaler
 func (cav *Caveat) MarshalJSON() ([]byte, error) {
-	cavjson := caveatJSON{Location: cav.location}
-	cavjson.CID = base64.StdEncoding.EncodeToString(cav.caveatId)
-	cavjson.VID = base64.StdEncoding.EncodeToString(cav.verificationId)
-	return json.Marshal(cavjson)
+	cavJSON := caveatJSON{Location: cav.location}
+	cavJSON.CID = base64.StdEncoding.EncodeToString(cav.caveatId)
+	cavJSON.VID = base64.StdEncoding.EncodeToString(cav.verificationId)
+	data, err := json.Marshal(cavJSON)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
-// UnmarshalJSON returns a Caeat from a json representation.
+// Implement Unmarshaler
 func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
 	var err error
-	cavjson := caveatJSON{}
-	json.Unmarshal(jsonData, &cavjson)
-	cav.location = cavjson.Location
-	cav.caveatId, err = base64.StdEncoding.DecodeString(cavjson.CID)
+	cavJSON := caveatJSON{}
+	json.Unmarshal(jsonData, &cavJSON)
+	cav.location = cavJSON.Location
+	cav.caveatId, err = base64.StdEncoding.DecodeString(cavJSON.CID)
 	if err != nil {
 		return err
 	}
-	cav.verificationId, err = base64.StdEncoding.DecodeString(cavjson.VID)
+	cav.verificationId, err = base64.StdEncoding.DecodeString(cavJSON.VID)
 	if err != nil {
 		return err
 	}
@@ -251,23 +255,28 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 	return true, nil
 }
 
-// MarshalJSON Returns a json representation of a macaroon.
+// Implement Marshaler
 func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	mjson := macaroonJSON{}
 	mjson.Location = m.Location()
 	mjson.Identifier = base64.StdEncoding.EncodeToString(m.Id())
 	mjson.Signature = base64.StdEncoding.EncodeToString(m.Signature())
+	mjson.Caveats = make([]caveatJSON, 0, len(m.caveats))
 	for _, cav := range m.caveats {
-		cavjson := caveatJSON{
+		cavJSON := caveatJSON{
 			Location: cav.location,
 			CID:      base64.StdEncoding.EncodeToString(cav.caveatId),
 			VID:      base64.StdEncoding.EncodeToString(cav.verificationId)}
-		mjson.Caveats = append(mjson.Caveats, cavjson)
+		mjson.Caveats = append(mjson.Caveats, cavJSON)
 	}
-	return json.Marshal(mjson)
+	data, err := json.Marshal(mjson)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
-// Unmarshaljson returns a macaroon from a json representation.
+// Implement Unmarshaler
 func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	mjson := macaroonJSON{}
 	err := json.Unmarshal(jsonData, &mjson)
