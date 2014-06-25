@@ -89,12 +89,21 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	err = json.Unmarshal(m0JSON, &m1)
 	c.Assert(err, gc.IsNil)
 	c.Assert(m0.Location(), gc.Equals, m1.Location())
-	c.Assert(
-		hex.EncodeToString(m0.Id()),
-		gc.Equals,
-		hex.EncodeToString(m1.Id()))
+	c.Assert(m0.Id(), gc.Equals, m1.Id())
 	c.Assert(
 		hex.EncodeToString(m0.Signature()),
 		gc.Equals,
 		hex.EncodeToString(m1.Signature()))
+}
+
+func (*macaroonSuite) TestUnmarshalJSON(c *gc.C) {
+	var m macaroon.Macaroon
+	jsonData := `{"caveats":[{"cid":"account = 3735928559"},{"cid":"time < 2015-01-01T00:00"},{"cid":"email = alice@example.org"}],"location":"http:\\/\\/mybank\\/","identifier":"we used our secret key","signature":"882e6d59496ed5245edb7ab5b8839ecd63e5d504e54839804f164070d8eed952"}`
+	mJSON := []byte(jsonData)
+	err := json.Unmarshal(mJSON, &m)
+	c.Assert(err, gc.IsNil)
+	c.Assert(m.Id(), gc.Equals, "we used our secret key")
+	c.Assert(m.Location(), gc.Equals, "http:\\/\\/mybank\\/")
+	caveats := m.Caveats()
+	c.Assert(caveats, gc.HasLen, 3)
 }

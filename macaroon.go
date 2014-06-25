@@ -115,13 +115,19 @@ func (m *Macaroon) Location() string {
 
 // Id returns the id of the macaroon. This can hold
 // arbitrary information.
-func (m *Macaroon) Id() []byte {
-	return append([]byte(nil), m.id...)
+func (m *Macaroon) Id() string {
+	return m.id
 }
 
 // Signature returns the macaroon's signature.
 func (m *Macaroon) Signature() []byte {
 	return append([]byte(nil), m.sig...)
+}
+
+// Caveats returns the macaroon's caviats.
+// This method will probably change, and it's important not to change the returned caveat.
+func (m *Macaroon) Caveats() []Caveat {
+	return m.caveats
 }
 
 func (m *Macaroon) addCaveat(caveatId string, verificationId []byte, loc string) {
