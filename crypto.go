@@ -1,8 +1,8 @@
 package macaroon
 
 import (
-	"crypto/rand"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"hash"
@@ -10,9 +10,9 @@ import (
 	"code.google.com/p/go.crypto/nacl/secretbox"
 )
 
-func keyedHash(key, text []byte) []byte {
+func keyedHash(key []byte, text string) []byte {
 	h := keyedHasher(key)
-	h.Write(text)
+	h.Write([]byte(text))
 	return h.Sum(nil)
 }
 
@@ -35,7 +35,7 @@ const (
 	nonceLen = 24
 )
 
-func newNonce() (*[nonceLen] byte, error) {
+func newNonce() (*[nonceLen]byte, error) {
 	var nonce [nonceLen]byte
 	_, err := rand.Read(nonce[:])
 	if err != nil {
