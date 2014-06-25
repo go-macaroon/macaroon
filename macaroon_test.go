@@ -24,7 +24,7 @@ func never(string) (bool, error) {
 
 func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 	rootKey := []byte("secret")
-	m := macaroon.New(rootKey, []byte("some id"), "a location")
+	m := macaroon.New(rootKey, "some id", "a location")
 	c.Assert(m.Location(), gc.Equals, "a location")
 	c.Assert(string(m.Id()), gc.Equals, "some id")
 
@@ -35,7 +35,7 @@ func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 
 func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := macaroon.New(rootKey, []byte("some id"), "a location")
+	m := macaroon.New(rootKey, "some id", "a location")
 
 	caveats := map[string]bool{
 		"a caveat":       true,
@@ -60,7 +60,7 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := macaroon.New(rootKey, []byte("some id"), "a location")
+	m := macaroon.New(rootKey, "some id", "a location")
 
 	sharedSecret := []byte("shared secret")
 	id, err := m.AddThirdPartyCaveat(sharedSecret, "3rd party caveat", "remote.com")
@@ -81,12 +81,12 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	rootKey := []byte("secret")
-	m0 := macaroon.New(rootKey, []byte("some id"), "a location")
+	m0 := macaroon.New(rootKey, "some id", "a location")
 	m0.AddFirstPartyCaveat("account = 3735928559")
-	m0Json, err := json.Marshal(m0)
+	m0JSON, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
 	var m1 macaroon.Macaroon
-	err = json.Unmarshal(m0Json, &m1)
+	err = json.Unmarshal(m0JSON, &m1)
 	c.Assert(err, gc.IsNil)
 	c.Assert(m0.Location(), gc.Equals, m1.Location())
 	c.Assert(

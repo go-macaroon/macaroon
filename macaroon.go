@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,7 @@ import (
 // to avoid unwanted mutation.
 type Macaroon struct {
 	location string
-	id       []byte
+	id       string
 	caveats  []Caveat
 	sig      []byte
 }
@@ -39,7 +40,7 @@ type macaroonJSON struct {
 // Caveat holds a first person or third party caveat.
 type Caveat struct {
 	location       string
-	caveatId       []byte
+	caveatId       string
 	verificationId []byte
 }
 
@@ -53,7 +54,7 @@ type caveatJSON struct {
 // MarshalJSON implements json.Marshaler.
 func (cav *Caveat) MarshalJSON() ([]byte, error) {
 	cavJSON := caveatJSON{Location: cav.location}
-	cavJSON.CID = hex.EncodeToString(cav.caveatId)
+	cavJSON.CID = cav.caveatId
 	cavJSON.VID = hex.EncodeToString(cav.verificationId)
 	data, err := json.Marshal(cavJSON)
 	if err != nil {
@@ -68,7 +69,7 @@ func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
 	cavJSON := caveatJSON{}
 	json.Unmarshal(jsonData, &cavJSON)
 	cav.location = cavJSON.Location
-	cav.caveatId, err = hex.DecodeString(cavJSON.CID)
+	cav.caveatId = cavJSON.CID
 	if err != nil {
 		return fmt.Errorf("Cannot decode caveat id %q: %v.", cavJSON.CID, err)
 	}
@@ -87,12 +88,12 @@ func (cav *Caveat) IsThirdParty() bool {
 
 // New returns a new macaroon with the given root key,
 // identifier and location.
-func New(rootKey, id []byte, loc string) *Macaroon {
+func New(rootKey []byte, id, loc string) *Macaroon {
 	m := &Macaroon{
 		location: loc,
-		id:       []byte(id),
+		id:       id,
 	}
-	m.sig = keyedHash(rootKey, m.id)
+	m.sig = keyedHash(rootKey, []byte(m.id))
 	return m
 }
 
@@ -121,7 +122,7 @@ func (m *Macaroon) Signature() []byte {
 	return append([]byte(nil), m.sig...)
 }
 
-func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) {
+func (m *Macaroon) addCaveat(caveatId string, verificationId []byte, loc string) {
 	m.caveats = append(m.caveats, Caveat{
 		location:       loc,
 		caveatId:       caveatId,
@@ -129,7 +130,7 @@ func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) {
 	})
 	sig := keyedHasher(m.sig)
 	sig.Write(verificationId)
-	sig.Write(caveatId)
+	sig.Write([]byte(caveatId))
 	m.sig = sig.Sum(nil)
 }
 
@@ -142,8 +143,8 @@ func (m *Macaroon) Bind(rootSig []byte) {
 
 // AddFirstPartyCaveat adds a caveat that will be verified
 // by the target service.
-func (m *Macaroon) AddFirstPartyCaveat(caveat string) {
-	m.addCaveat([]byte(caveat), nil, "")
+func (m *Macaroon) AddFirstPartyCaveat(caveatId string) {
+	m.addCaveat(caveatId, nil, "")
 }
 
 // ThirdPartyCaveatId holds the information encoded in
@@ -155,8 +156,10 @@ type ThirdPartyCaveatId struct {
 
 // DecryptThirdPartyCaveatId decrypts a third-party caveat
 // id given the shared secret.
-func DecryptThirdPartyCaveatId(secret, id []byte) (*ThirdPartyCaveatId, error) {
-	plain, err := decrypt(secret, id)
+func DecryptThirdPartyCaveatId(secret []byte, id string) (*ThirdPartyCaveatId, error) {
+	//FIXME id is going to be a base64 string and needs to be decoded
+	decodedId, err := base64.StdEncoding.DecodeString(id)
+	plain, err := decrypt(secret, decodedId)
 	if err != nil {
 		return nil, err
 	}
@@ -170,25 +173,26 @@ func DecryptThirdPartyCaveatId(secret, id []byte) (*ThirdPartyCaveatId, error) {
 // AddThirdPartyCaveat adds a third-party caveat to the macaroon,
 // using the given shared secret, caveat and location hint.
 // It returns the caveat id of the third party macaroon.
-func (m *Macaroon) AddThirdPartyCaveat(thirdPartySecret []byte, caveat string, loc string) (id []byte, err error) {
+func (m *Macaroon) AddThirdPartyCaveat(thirdPartySecret []byte, caveat string, loc string) (id string, err error) {
 	nonce, err := newNonce()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	data, err := json.Marshal(ThirdPartyCaveatId{nonce[:], caveat})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	caveatId, err := encrypt(thirdPartySecret, data)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	verificationId, err := encrypt(m.sig, nonce[:])
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	m.addCaveat(caveatId, verificationId, loc)
-	return caveatId, nil
+	encCaveatId := base64.StdEncoding.EncodeToString(caveatId)
+	m.addCaveat(encCaveatId, verificationId, loc)
+	return encCaveatId, nil
 }
 
 // bndForRequest binds the given macaroon
@@ -222,7 +226,7 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 	if len(rootSig) == 0 {
 		rootSig = m.sig
 	}
-	caveatSig := keyedHash(rootKey, m.id)
+	caveatSig := keyedHash(rootKey, []byte(m.id))
 	for i, cav := range m.caveats {
 		if cav.IsThirdParty() {
 			cavKey, err := decrypt(caveatSig, cav.verificationId)
@@ -245,7 +249,7 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 		}
 		sig := keyedHasher(caveatSig)
 		sig.Write(cav.verificationId)
-		sig.Write(cav.caveatId)
+		sig.Write([]byte(cav.caveatId))
 		caveatSig = sig.Sum(caveatSig[:0])
 	}
 	// TODO perhaps we should actually do this check before doing
@@ -261,14 +265,14 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	mjson := macaroonJSON{
 		Location:   m.Location(),
-		Identifier: hex.EncodeToString(m.id),
+		Identifier: m.id,
 		Signature:  hex.EncodeToString(m.sig),
 		Caveats:    make([]caveatJSON, 0, len(m.caveats)),
 	}
 	for _, cav := range m.caveats {
 		cavJSON := caveatJSON{
 			Location: cav.location,
-			CID:      hex.EncodeToString(cav.caveatId),
+			CID:      cav.caveatId,
 			VID:      hex.EncodeToString(cav.verificationId)}
 		mjson.Caveats = append(mjson.Caveats, cavJSON)
 	}
@@ -287,17 +291,14 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 		return fmt.Errorf("Cannot unmarshal json data: %v", err)
 	}
 	m.location = mjson.Location
-	m.id, err = hex.DecodeString(mjson.Identifier)
-	if err != nil {
-		return fmt.Errorf("Cannot decode macaroon identifier %q: %v.", m.id, err)
-	}
+	m.id = mjson.Identifier
 	m.sig, err = hex.DecodeString(mjson.Signature)
 	if err != nil {
 		return fmt.Errorf("Cannot decode macaroon signature %q: %v.", m.sig, err)
 	}
 	for _, jsoncav := range mjson.Caveats {
 		cav := Caveat{location: jsoncav.Location}
-		cav.caveatId, err = hex.DecodeString(jsoncav.CID)
+		cav.caveatId = jsoncav.CID
 		cav.verificationId, err = hex.DecodeString(jsoncav.VID)
 		m.caveats = append(m.caveats, cav)
 	}
