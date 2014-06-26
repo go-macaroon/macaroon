@@ -70,11 +70,11 @@ func (cav *Caveat) MarshalJSON() ([]byte, error) {
 func (cav *Caveat) UnmarshalJSON(jsonData []byte) error {
 	var cavJSON caveatJSON
 	err := json.Unmarshal(jsonData, &cavJSON)
-	cav.location = cavJSON.Location
-	cav.caveatId = cavJSON.CID
 	if err != nil {
 		return fmt.Errorf("cannot decode caveat id %q: %v", cavJSON.CID, err)
 	}
+	cav.location = cavJSON.Location
+	cav.caveatId = cavJSON.CID
 	cav.verificationId, err = hex.DecodeString(cavJSON.VID)
 	if err != nil {
 		return fmt.Errorf("cannot decode verfification id %q: %v", cavJSON.VID, err)
@@ -124,7 +124,7 @@ func (m *Macaroon) Signature() []byte {
 	return append([]byte(nil), m.sig...)
 }
 
-// Caveats returns the macaroon's caviats.
+// Caveats returns the macaroon's caveats.
 // This method will probably change, and it's important not to change the returned caveat.
 func (m *Macaroon) Caveats() []Caveat {
 	return m.caveats
