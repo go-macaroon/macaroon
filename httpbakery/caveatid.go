@@ -18,13 +18,13 @@ import (
 
 const keyLen = 32
 
-// CaveatIdEncoder implements bakery.CaveatIdEncoder. It
+// caveatIdEncoder implements bakery.CaveatIdEncoder. It
 // knows how to make caveat ids by communicating
 // with the caveat id creation service served by DischargeHandler,
 // and also how to create caveat ids using public key
 // cryptography (also recognised by the DischargeHandler
 // service).
-type CaveatIdEncoder struct {
+type caveatIdEncoder struct {
 	key KeyPair
 
 	// mu guards the fields following it.
@@ -58,21 +58,12 @@ func GenerateKey() (*KeyPair, error) {
 	return &key, nil
 }
 
-// NewCaveatIdEncoder returns a new CaveatIdEncoder key, which should
-// have been created using the NACL box.GenerateKey function. The keys may be nil,
-// in which case new keys will be generated automatically.
-func NewCaveatIdEncoder(key *KeyPair) (*CaveatIdEncoder, error) {
-	enc := &CaveatIdEncoder{}
-	if key == nil {
-		priv, pub, err := box.GenerateKey(rand.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("cannot generate key: %v", err)
-		}
-		enc.key.private, enc.key.public = *priv, *pub
-	} else {
-		enc.key = *key
+// newCaveatIdEncoder returns a new caveatIdEncoder using key, which should
+// have been created using GenerateKey.
+func newCaveatIdEncoder(key *KeyPair) *caveatIdEncoder {
+	return &caveatIdEncoder{
+		key: *key,
 	}
-	return enc, nil
 }
 
 type caveatIdResponse struct {
@@ -87,11 +78,11 @@ type caveatIdSealed struct {
 
 // EncodeCaveatId implements bakery.CaveatIdEncoder.EncodeCaveatId.
 // This is the client side of DischargeHandler's /create endpoint.
-func (enc *CaveatIdEncoder) EncodeCaveatId(cav bakery.Caveat, rootKey []byte) (string, error) {
+func (enc *caveatIdEncoder) EncodeCaveatId(cav bakery.Caveat, rootKey []byte) (string, error) {
 	if cav.Location == "" {
 		return "", fmt.Errorf("cannot make caveat id for first party caveat")
 	}
-	var id *ThirdPartyCaveatId
+	var id *thirdPartyCaveatId
 	var err error
 	thirdPartyPub := enc.publicKeyForLocation(cav.Location)
 	if thirdPartyPub != nil {
@@ -109,7 +100,7 @@ func (enc *CaveatIdEncoder) EncodeCaveatId(cav bakery.Caveat, rootKey []byte) (s
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
-func (enc *CaveatIdEncoder) newEncryptedCaveatId(cav bakery.Caveat, rootKey []byte, thirdPartyPub *[32]byte) (*ThirdPartyCaveatId, error) {
+func (enc *caveatIdEncoder) newEncryptedCaveatId(cav bakery.Caveat, rootKey []byte, thirdPartyPub *[32]byte) (*thirdPartyCaveatId, error) {
 	var nonce [24]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, fmt.Errorf("cannot generate random number for nonce: %v", err)
@@ -123,7 +114,7 @@ func (enc *CaveatIdEncoder) newEncryptedCaveatId(cav bakery.Caveat, rootKey []by
 		return nil, fmt.Errorf("cannot marshal %#v: %v", &plain, err)
 	}
 	sealed := box.Seal(nil, plainData, &nonce, thirdPartyPub, &enc.key.private)
-	return &ThirdPartyCaveatId{
+	return &thirdPartyCaveatId{
 		ThirdPartyPublicKey: thirdPartyPub[:],
 		FirstPartyPublicKey: enc.key.public[:],
 		Nonce:               nonce[:],
@@ -131,7 +122,7 @@ func (enc *CaveatIdEncoder) newEncryptedCaveatId(cav bakery.Caveat, rootKey []by
 	}, nil
 }
 
-func (enc *CaveatIdEncoder) newStoredCaveatId(cav bakery.Caveat, rootKey []byte) (*ThirdPartyCaveatId, error) {
+func (enc *caveatIdEncoder) newStoredCaveatId(cav bakery.Caveat, rootKey []byte) (*thirdPartyCaveatId, error) {
 	// TODO(rog) fetch public key from service here, and use public
 	// key encryption if available?
 
@@ -160,7 +151,7 @@ func (enc *CaveatIdEncoder) newStoredCaveatId(cav bakery.Caveat, rootKey []byte)
 	if resp.CaveatId == "" {
 		return nil, fmt.Errorf("empty caveat id returned from %q", u)
 	}
-	return &ThirdPartyCaveatId{
+	return &thirdPartyCaveatId{
 		Id: resp.CaveatId,
 	}, nil
 }
@@ -172,7 +163,7 @@ func appendURLElem(u, elem string) string {
 	return u + "/" + elem
 }
 
-// ThirdPartyCaveatId defines the format
+// thirdPartyCaveatId defines the format
 // of a third party caveat id. If ThirdPartyPublicKey
 // is non-empty, then both FirstPartyPublicKey
 // and Nonce must be set, and the id will have
@@ -181,24 +172,14 @@ func appendURLElem(u, elem string) string {
 //
 // If not, the Id holds an id that was created
 // by the third party.
-type ThirdPartyCaveatId struct {
+type thirdPartyCaveatId struct {
 	ThirdPartyPublicKey []byte `json:",omitempty"`
 	FirstPartyPublicKey []byte `json:",omitempty"`
 	Nonce               []byte `json:",omitempty"`
 	Id                  string
 }
 
-// AddPublicKeyForLocation specifies that third party caveats
-// for the given location will be encrypted with the given public
-// key. If prefix is true, any locations with loc as a prefix will
-// be also associated with the given key. The longest prefix
-// match will be chosen.
-// TODO(rog) perhaps string might be a better representation
-// of public keys?
-func (enc *CaveatIdEncoder) AddPublicKeyForLocation(loc string, prefix bool, key *[32]byte) {
-	if len(key) != keyLen {
-		panic("empty public key added")
-	}
+func (enc *caveatIdEncoder) addPublicKeyForLocation(loc string, prefix bool, key *[32]byte) {
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
 	enc.publicKeys = append(enc.publicKeys, publicKeyRecord{
@@ -208,7 +189,7 @@ func (enc *CaveatIdEncoder) AddPublicKeyForLocation(loc string, prefix bool, key
 	})
 }
 
-func (enc *CaveatIdEncoder) publicKeyForLocation(loc string) *[32]byte {
+func (enc *caveatIdEncoder) publicKeyForLocation(loc string) *[32]byte {
 	enc.mu.Lock()
 	defer enc.mu.Unlock()
 	var (
@@ -239,7 +220,7 @@ type caveatIdDecoder struct {
 	key   *KeyPair
 }
 
-func NewCaveatIdDecoder(store bakery.Storage, key *KeyPair) bakery.CaveatIdDecoder {
+func newCaveatIdDecoder(store bakery.Storage, key *KeyPair) bakery.CaveatIdDecoder {
 	return &caveatIdDecoder{
 		store: store,
 		key:   key,
@@ -251,7 +232,7 @@ func (d *caveatIdDecoder) DecodeCaveatId(id string) (rootKey []byte, condition s
 	if err != nil {
 		return nil, "", fmt.Errorf("cannot base64-decode caveat id: %v", err)
 	}
-	var tpid ThirdPartyCaveatId
+	var tpid thirdPartyCaveatId
 	if err := json.Unmarshal(data, &tpid); err != nil {
 		return nil, "", fmt.Errorf("cannot unmarshal caveat id: %v", err)
 	}
@@ -272,7 +253,7 @@ func (d *caveatIdDecoder) DecodeCaveatId(id string) (rootKey []byte, condition s
 	return record.RootKey, record.Condition, nil
 }
 
-func (d *caveatIdDecoder) encryptedCaveatId(id ThirdPartyCaveatId) ([]byte, error) {
+func (d *caveatIdDecoder) encryptedCaveatId(id thirdPartyCaveatId) ([]byte, error) {
 	if d.key == nil {
 		return nil, fmt.Errorf("no public key for caveat id decryption")
 	}

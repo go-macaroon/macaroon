@@ -20,17 +20,13 @@ type dischargeHandler struct {
 	checker func(req *http.Request, cav string) ([]bakery.Caveat, error)
 }
 
-// DischargeHandler returns an HTTP handler that issues discharge macaroons
-// to clients after using the given check function to ensure that the given
-// client is allowed to obtain a discharge.
+// AddDischargeHandler handles adds handlers to the given ServeMux
+// to service third party caveats.
 //
 // The check function is used to check whether a client making the given
 // request should be allowed a discharge for the given caveat. If it
 // does not return an error, the caveat will be discharged, with any
 // returned caveats also added to the discharge macaroon.
-//
-// If key is not nil, it will be used to decrypt caveat ids, and
-// the public part of it will be served from /publickey.
 //
 // The name space served by DischargeHandler is as follows.
 // All parameters can be provided either as URL attributes
@@ -61,23 +57,21 @@ type dischargeHandler struct {
 //	result:
 //		public key of service
 //		expiry time of key
-func AddDischargeHandler(
+func (svc *Service) AddDischargeHandler(
 	root string,
 	mux *http.ServeMux,
-	svc *bakery.Service,
-	key *KeyPair,
 	checker func(req *http.Request, cav string) ([]bakery.Caveat, error),
 ) {
 	d := &dischargeHandler{
-		key:     key,
-		svc:     svc,
+		key:     &svc.key,
+		svc:     svc.Service,
 		checker: checker,
 	}
 	mux.HandleFunc(path.Join(root, "discharge"), d.serveDischarge)
 	mux.HandleFunc(path.Join(root, "create"), d.serveCreate)
-	if key != nil {
-		mux.HandleFunc(path.Join(root, "publickey"), d.servePublicKey)
-	}
+	// TODO(rog) is there a case for making public key caveat signing
+	// optional?
+	mux.HandleFunc(path.Join(root, "publickey"), d.servePublicKey)
 }
 
 type dischargeResponse struct {
@@ -100,7 +94,7 @@ func (d *dischargeHandler) serveDischarge(w http.ResponseWriter, req *http.Reque
 	}
 	discharger := &bakery.Discharger{
 		Checker: bakery.ThirdPartyCheckerFunc(checker),
-		Decoder: NewCaveatIdDecoder(d.svc.Store(), d.key),
+		Decoder: newCaveatIdDecoder(d.svc.Store(), d.key),
 		Factory: d.svc,
 	}
 
@@ -170,7 +164,7 @@ func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request)
 		d.internalError(w, "cannot store caveat id record: %v", err)
 		return
 	}
-	tpidBytes, err := json.Marshal(&ThirdPartyCaveatId{
+	tpidBytes, err := json.Marshal(&thirdPartyCaveatId{
 		Id: internalId,
 	})
 	if err != nil {

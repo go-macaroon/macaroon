@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/rogpeppe/macaroon/bakery"
@@ -12,16 +11,14 @@ import (
 // This service can act as a checker for third party caveats.
 
 func authService(endpoint string) (http.Handler, error) {
-	enc, err := httpbakery.NewCaveatIdEncoder(nil)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create caveat id decoder: %v", err)
-	}
-	svc := bakery.NewService(bakery.NewServiceParams{
-		Location:        endpoint,
-		CaveatIdEncoder: enc,
+	svc, err := httpbakery.NewService(httpbakery.NewServiceParams{
+		Location: endpoint,
 	})
+	if err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
-	httpbakery.AddDischargeHandler("/", mux, svc, nil, thirdPartyChecker)
+	svc.AddDischargeHandler("/", mux, thirdPartyChecker)
 	return mux, nil
 }
 

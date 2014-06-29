@@ -11,24 +11,22 @@ import (
 )
 
 type myServer struct {
-	svc          *bakery.Service
+	svc          *httpbakery.Service
 	authEndpoint string
 	endpoint     string
 }
 
 func targetService(endpoint, authEndpoint string) (http.Handler, error) {
-	enc, err := httpbakery.NewCaveatIdEncoder(nil)
+	svc, err := httpbakery.NewService(httpbakery.NewServiceParams{
+		Location: endpoint,
+	})
 	if err != nil {
 		return nil, err
 	}
-	srv := &myServer{
-		svc: bakery.NewService(bakery.NewServiceParams{
-			Location:        endpoint,
-			CaveatIdEncoder: enc,
-		}),
+	return &myServer{
+		svc:          svc,
 		authEndpoint: authEndpoint,
-	}
-	return srv, nil
+	}, nil
 }
 
 func (srv *myServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
