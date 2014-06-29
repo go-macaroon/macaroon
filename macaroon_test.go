@@ -77,9 +77,7 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 
 	dm := macaroon.New(dischargeRootKey, thirdPartyCaveatId, "remote location")
 	dm.Bind(m.Signature())
-	err = m.Verify(rootKey, never, map[string]*macaroon.Macaroon{
-		thirdPartyCaveatId: dm,
-	})
+	err = m.Verify(rootKey, never, []*macaroon.Macaroon{dm})
 	c.Assert(err, gc.IsNil)
 }
 

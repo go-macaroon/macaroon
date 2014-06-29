@@ -2,9 +2,6 @@
 // the paper "Macaroons: Cookies with Contextual Caveats for
 // Decentralized Authorization in the Cloud"
 // (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
-//
-// It still in its very early stages, having no support for serialisation
-// and only rudimentary test coverage.
 package macaroon
 
 import (
@@ -191,14 +188,14 @@ func bindForRequest(rootSig, dischargeSig []byte) []byte {
 // Verify returns true if the verification succeeds; if returns
 // (false, nil) if the verification fails, and (false, err) if
 // the verification cannot be asserted (but may not be false).
-func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges map[string] *Macaroon) error {
+func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges []*Macaroon) error {
 	// TODO(rog) consider distinguishing between classes of
 	// check error - some errors may be resolved by minting
 	// a new macaroon; others may not.
 	return m.verify(m.sig, rootKey, check, discharges)
 }
 
-func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat string) error, discharges map[string]*Macaroon) error {
+func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat string) error, discharges []*Macaroon) error {
 	if len(rootSig) == 0 {
 		rootSig = m.sig
 	}
@@ -209,15 +206,30 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 			if err != nil {
 				return fmt.Errorf("failed to decrypt caveat %d signature: %v", i, err)
 			}
-			dm, ok := discharges[string(cav.caveatId)]
-			if !ok {
+			// We choose an arbitrary error from one of the
+			// possible discharge macaroon verifications
+			// if there's more than one discharge macaroon
+			// with the required id.
+			var verifyErr error
+			found := false
+			for _, dm := range discharges {
+				if dm.Id() != cav.caveatId {
+					continue
+				}
+				found = true
+				verifyErr = dm.verify(rootSig, cavKey, check, discharges)
+				if verifyErr == nil {
+					break
+				}
+			}
+			if !found {
 				return fmt.Errorf("cannot find discharge macaroon for caveat %d", i)
 			}
-			if err := dm.verify(rootSig, cavKey, check, discharges); err != nil {
-				return err
+			if verifyErr != nil {
+				return verifyErr
 			}
 		} else {
-			if err := check(string(cav.caveatId)); err != nil {
+			if err := check(cav.caveatId); err != nil {
 				return err
 			}
 		}
