@@ -6,9 +6,6 @@ The macaroon package implements macaroons as described in the paper "Macaroons:
 Cookies with Contextual Caveats for Decentralized Authorization in the Cloud"
 (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
 
-It still in its very early stages, having no support for serialisation and only
-rudimentary test coverage.
-
 ## Usage
 
 #### type Caveat
@@ -141,7 +138,7 @@ UnmarshalJSON implements json.Unmarshaler.
 #### func (*Macaroon) Verify
 
 ```go
-func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges map[string]*Macaroon) error
+func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges []*Macaroon) error
 ```
 Verify verifies that the receiving macaroon is valid. The root key must be the
 same that the macaroon was originally minted with. The check function is called
@@ -153,6 +150,9 @@ The discharge macaroons should be provided in discharges.
 Verify returns true if the verification succeeds; if returns (false, nil) if the
 verification fails, and (false, err) if the verification cannot be asserted (but
 may not be false).
+
+TODO(rog) is there a possible DOS attack that can cause this function to
+infinitely recurse?
 
 #### type Verifier
 
