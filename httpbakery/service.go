@@ -15,7 +15,9 @@ import (
 )
 
 // Service represents a service that can use client-provided
-// macaroons to authorize requests.
+// macaroons to authorize requests. It layers on top
+// of *bakery.Service, providing http-based methods
+// to create third-party caveats.
 type Service struct {
 	*bakery.Service
 	caveatIdEncoder *caveatIdEncoder

@@ -1,3 +1,5 @@
+// The checkers package provides some standard caveat
+// checkers and checker-combining functions.
 package checkers
 
 import (

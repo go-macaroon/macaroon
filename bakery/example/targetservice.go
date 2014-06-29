@@ -11,12 +11,16 @@ import (
 	"github.com/rogpeppe/macaroon/httpbakery"
 )
 
-type myServer struct {
+type targetServiceHandler struct {
 	svc          *httpbakery.Service
 	authEndpoint string
 	endpoint     string
 }
 
+// targetService implements a "target service", representing
+// an arbitrary web service that wants to delegate authorization
+// to third parties.
+//
 func targetService(endpoint, authEndpoint string) (http.Handler, error) {
 	svc, err := httpbakery.NewService(httpbakery.NewServiceParams{
 		Location: endpoint,
@@ -24,13 +28,19 @@ func targetService(endpoint, authEndpoint string) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &myServer{
+	return &targetServiceHandler{
 		svc:          svc,
 		authEndpoint: authEndpoint,
 	}, nil
 }
 
-func (srv *myServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (srv *targetServiceHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Note that capabilities (the "can-access-me" identifier
+	// below) are completely separate from the caveat conditions.
+	//
+	// They are the language that we use to determine what privileges
+	// a client has. Caveats put conditions on those capabilities.
+
 	breq := srv.svc.NewRequest(req, srv.checkers(req))
 	if err := breq.Check("can-access-me"); err != nil {
 		srv.writeError(w, err)
@@ -39,7 +49,11 @@ func (srv *myServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "hello, world\n")
 }
 
-func (svc *myServer) checkers(req *http.Request) bakery.FirstPartyChecker {
+// checkers implements the caveat checking for the service.
+// Note how we add context-sensitive checkers
+// (remote-host checks information from the HTTP request)
+// to the standard checkers implemented by checkers.Std.
+func (svc *targetServiceHandler) checkers(req *http.Request) bakery.FirstPartyChecker {
 	m := checkers.Map{
 		"remote-host": func(s string) error {
 			// TODO(rog) do we want to distinguish between
@@ -61,7 +75,14 @@ func (svc *myServer) checkers(req *http.Request) bakery.FirstPartyChecker {
 	return checkers.PushFirstPartyChecker(m, checkers.Std)
 }
 
-func (srv *myServer) writeError(w http.ResponseWriter, err error) {
+// writeError writes an error to w. If the error was generated because
+// of a required capability that the client does not have, we mint a
+// macaroon that, when discharged, will grant the client that
+// capability.
+//
+// The logic in this function is crucial to the security of the service
+// - it must determine for a given capability what caveats to attach.
+func (srv *targetServiceHandler) writeError(w http.ResponseWriter, err error) {
 	fail := func(code int, msg string, args ...interface{}) {
 		if code == http.StatusInternalServerError {
 			msg = "internal error: " + msg

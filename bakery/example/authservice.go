@@ -7,9 +7,9 @@ import (
 	"github.com/rogpeppe/macaroon/httpbakery"
 )
 
-// Authorization service.
-// This service can act as a checker for third party caveats.
-
+// authService implements an authorization service,
+// that can discharge third-party caveats added
+// to other macaroons.
 func authService(endpoint string) (http.Handler, error) {
 	svc, err := httpbakery.NewService(httpbakery.NewServiceParams{
 		Location: endpoint,
@@ -22,6 +22,12 @@ func authService(endpoint string) (http.Handler, error) {
 	return mux, nil
 }
 
+// thirdPartyChecker is used to check third party caveats added by other
+// services. The HTTP request is that of the client - it is attempting
+// to gather a discharge macaroon.
+//
+// Note how this function can return additional first- and third-party
+// caveats which will be added to the original macaroon's caveats.
 func thirdPartyChecker(req *http.Request, condition string) ([]bakery.Caveat, error) {
 	if condition != "access-allowed" {
 		return nil, &bakery.CaveatNotRecognizedError{condition}

@@ -38,6 +38,7 @@ type publicKeyRecord struct {
 	key      [32]byte
 }
 
+// KeyPair holds a public/private pair of keys.
 type KeyPair struct {
 	public  [32]byte
 	private [32]byte
@@ -45,6 +46,7 @@ type KeyPair struct {
 
 // TODO(rog) marshal/unmarshal functions for KeyPair
 
+// GenerateKey generates a new key pair.
 func GenerateKey() (*KeyPair, error) {
 	var key KeyPair
 	priv, pub, err := box.GenerateKey(rand.Reader)

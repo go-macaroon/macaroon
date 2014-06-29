@@ -1,3 +1,20 @@
+// This example demonstrates three components:
+//
+// - A target service, representing a web server that
+// wishes to use macaroons for authorization.
+// It delegates authorization to a third-party
+// authorization server by adding third-party
+// caveats to macaroons that it sends to the user.
+//
+// - A client, representing a client wanting to make
+// requests to the server.
+//
+// - An authorization server.
+//
+// In a real system, these three components would
+// live on different machines; the client component
+// could also be a web browser.
+// (TODO: write javascript discharge gatherer)
 package main
 
 import (
