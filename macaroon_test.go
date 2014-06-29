@@ -81,6 +81,353 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 }
 
+type caveat struct {
+	rootKey   string
+	location  string
+	condition string
+}
+
+type macaroonSpec struct {
+	rootKey  string
+	id       string
+	caveats  []caveat
+	location string
+}
+
+type conditionTest struct {
+	conditions map[string]bool
+	expectErr  string
+}
+
+var verifyTests = []struct {
+	about      string
+	macaroons  []macaroonSpec
+	conditions []conditionTest
+}{{
+	about: "single third party caveat without discharge",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful": true,
+		},
+		expectErr: `cannot find discharge macaroon for caveat "bob-is-great"`,
+	}},
+}, {
+	about: "single third party caveat with discharge",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful": true,
+		},
+	}, {
+		conditions: map[string]bool{
+			"wonderful": false,
+		},
+		expectErr: `condition "wonderful" not met`,
+	}},
+}, {
+	about: "single third party caveat with discharge with mismatching root key",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key-wrong",
+		id:       "bob-is-great",
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful": true,
+		},
+		expectErr: `signature mismatch after caveat verification`,
+	}},
+}, {
+	about: "single third party caveat with two discharges",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+		caveats: []caveat{{
+			condition: "splendid",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+		caveats: []caveat{{
+			condition: "top of the world",
+		}},
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful": true,
+		},
+		expectErr: `condition "top of the world" not met`,
+	}, {
+		conditions: map[string]bool{
+			"wonderful":        true,
+			"splendid":         true,
+			"top of the world": true,
+		},
+	}, {
+		conditions: map[string]bool{
+			"wonderful":        true,
+			"splendid":         false,
+			"top of the world": true,
+		},
+	}, {
+		conditions: map[string]bool{
+			"wonderful":        true,
+			"splendid":         true,
+			"top of the world": false,
+		},
+	}},
+}, {
+	about: "two third party caveats",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}, {
+			condition: "charlie-is-great",
+			location:  "charlie",
+			rootKey:   "charlie-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+		caveats: []caveat{{
+			condition: "splendid",
+		}},
+	}, {
+		location: "charlie",
+		rootKey:  "charlie-caveat-root-key",
+		id:       "charlie-is-great",
+		caveats: []caveat{{
+			condition: "top of the world",
+		}},
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful":        true,
+			"splendid":         true,
+			"top of the world": true,
+		},
+	}, {
+		conditions: map[string]bool{
+			"wonderful":        true,
+			"splendid":         false,
+			"top of the world": true,
+		},
+		expectErr: `condition "splendid" not met`,
+	}, {
+		conditions: map[string]bool{
+			"wonderful":        true,
+			"splendid":         true,
+			"top of the world": false,
+		},
+		expectErr: `condition "top of the world" not met`,
+	}},
+}, {
+	about: "third party caveat with undischarged third party caveat",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+		caveats: []caveat{{
+			condition: "splendid",
+		}, {
+			condition: "barbara-is-great",
+			location:  "barbara",
+			rootKey:   "barbara-caveat-root-key",
+		}},
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful": true,
+			"splendid":  true,
+		},
+		expectErr: `cannot find discharge macaroon for caveat "barbara-is-great"`,
+	}},
+}, {
+	about: "recursive third party caveats",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "wonderful",
+		}, {
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}, {
+			condition: "charlie-is-great",
+			location:  "chjarlie",
+			rootKey:   "charlie-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+		caveats: []caveat{{
+			condition: "splendid",
+		}, {
+			condition: "barbara-is-great",
+			location:  "barbara",
+			rootKey:   "barbara-caveat-root-key",
+		}},
+	}, {
+		location: "charlie",
+		rootKey:  "charlie-caveat-root-key",
+		id:       "charlie-is-great",
+		caveats: []caveat{{
+			condition: "splendid",
+		}, {
+			condition: "celine-is-great",
+			location:  "celine",
+			rootKey:   "celine-caveat-root-key",
+		}},
+	}, {
+		location: "barbara",
+		rootKey:  "barbara-caveat-root-key",
+		id:       "barbara-is-great",
+		caveats: []caveat{{
+			condition: "spiffing",
+		}, {
+			condition: "ben-is-great",
+			location:  "ben",
+			rootKey:   "ben-caveat-root-key",
+		}},
+	}, {
+		location: "ben",
+		rootKey:  "ben-caveat-root-key",
+		id:       "ben-is-great",
+	}, {
+		location: "celine",
+		rootKey:  "celine-caveat-root-key",
+		id:       "celine-is-great",
+		caveats: []caveat{{
+			condition: "high-fiving",
+		}},
+	}},
+	conditions: []conditionTest{{
+		conditions: map[string]bool{
+			"wonderful":   true,
+			"splendid":    true,
+			"high-fiving": true,
+			"spiffing":    true,
+		},
+	}, {
+		conditions: map[string]bool{
+			"wonderful":   true,
+			"splendid":    true,
+			"high-fiving": false,
+			"spiffing":    true,
+		},
+		expectErr: `condition "high-fiving" not met`,
+	}},
+}}
+
+func (*macaroonSuite) TestVerify(c *gc.C) {
+	for i, test := range verifyTests {
+		c.Logf("test %d: %s", i, test.about)
+		var macaroons []*macaroon.Macaroon
+		for _, mspec := range test.macaroons {
+			m := macaroon.New([]byte(mspec.rootKey), mspec.id, mspec.location)
+			for _, cav := range mspec.caveats {
+				if cav.location != "" {
+					err := m.AddThirdPartyCaveat([]byte(cav.rootKey), cav.condition, cav.location)
+					c.Assert(err, gc.IsNil)
+				} else {
+					m.AddFirstPartyCaveat(cav.condition)
+				}
+			}
+			macaroons = append(macaroons, m)
+		}
+		primaryMac := macaroons[0]
+		discharges := macaroons[1:]
+		for _, m := range discharges {
+			m.Bind(primaryMac.Signature())
+		}
+		for _, cond := range test.conditions {
+			c.Logf("conditions %#v", cond.conditions)
+			check := func(cav string) error {
+				if cond.conditions[cav] {
+					return nil
+				}
+				return fmt.Errorf("condition %q not met", cav)
+			}
+			err := primaryMac.Verify(
+				[]byte(test.macaroons[0].rootKey),
+				check,
+				discharges,
+			)
+			if cond.expectErr != "" {
+				c.Assert(err, gc.ErrorMatches, cond.expectErr)
+			} else {
+				c.Assert(err, gc.IsNil)
+			}
+		}
+	}
+}
+
 func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	rootKey := []byte("secret")
 	m0 := macaroon.New(rootKey, "some id", "a location")

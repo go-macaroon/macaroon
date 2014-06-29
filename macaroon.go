@@ -188,6 +188,9 @@ func bindForRequest(rootSig, dischargeSig []byte) []byte {
 // Verify returns true if the verification succeeds; if returns
 // (false, nil) if the verification fails, and (false, err) if
 // the verification cannot be asserted (but may not be false).
+//
+// TODO(rog) is there a possible DOS attack that can cause this
+// function to infinitely recurse?
 func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges []*Macaroon) error {
 	// TODO(rog) consider distinguishing between classes of
 	// check error - some errors may be resolved by minting
@@ -223,7 +226,7 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 				}
 			}
 			if !found {
-				return fmt.Errorf("cannot find discharge macaroon for caveat %d", i)
+				return fmt.Errorf("cannot find discharge macaroon for caveat %q", cav.caveatId)
 			}
 			if verifyErr != nil {
 				return verifyErr
