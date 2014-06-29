@@ -28,6 +28,20 @@ func (cav *Caveat) IsThirdParty() bool
 IsThirdParty reports whether the caveat must be satisfied by some third party
 (if not, it's a first person caveat).
 
+#### func (*Caveat) MarshalJSON
+
+```go
+func (cav *Caveat) MarshalJSON() ([]byte, error)
+```
+MarshalJSON implements json.Marshaler.
+
+#### func (*Caveat) UnmarshalJSON
+
+```go
+func (cav *Caveat) UnmarshalJSON(jsonData []byte) error
+```
+unmarshalJSON implements json.Unmarshaler.
+
 #### type Macaroon
 
 ```go
@@ -43,21 +57,21 @@ to avoid unwanted mutation.
 #### func  New
 
 ```go
-func New(rootKey, id []byte, loc string) *Macaroon
+func New(rootKey []byte, id, loc string) *Macaroon
 ```
 New returns a new macaroon with the given root key, identifier and location.
 
 #### func (*Macaroon) AddFirstPartyCaveat
 
 ```go
-func (m *Macaroon) AddFirstPartyCaveat(caveat string)
+func (m *Macaroon) AddFirstPartyCaveat(caveatId string)
 ```
 AddFirstPartyCaveat adds a caveat that will be verified by the target service.
 
 #### func (*Macaroon) AddThirdPartyCaveat
 
 ```go
-func (m *Macaroon) AddThirdPartyCaveat(thirdPartySecret []byte, caveat string, loc string) (id []byte, err error)
+func (m *Macaroon) AddThirdPartyCaveat(thirdPartySecret []byte, caveat string, loc string) (id string, err error)
 ```
 AddThirdPartyCaveat adds a third-party caveat to the macaroon, using the given
 shared secret, caveat and location hint. It returns the caveat id of the third
@@ -72,6 +86,14 @@ Bind prepares the macaroon for being used to discharge the macaroon with the
 given rootSig. This must be used before it is used in the discharges argument to
 Verify.
 
+#### func (*Macaroon) Caveats
+
+```go
+func (m *Macaroon) Caveats() []Caveat
+```
+Caveats returns the macaroon's caveats. This method will probably change, and
+it's important not to change the returned caveat.
+
 #### func (*Macaroon) Clone
 
 ```go
@@ -82,7 +104,7 @@ Clone returns a copy of the receiving macaroon.
 #### func (*Macaroon) Id
 
 ```go
-func (m *Macaroon) Id() []byte
+func (m *Macaroon) Id() string
 ```
 Id returns the id of the macaroon. This can hold arbitrary information.
 
@@ -94,12 +116,26 @@ func (m *Macaroon) Location() string
 Location returns the macaroon's location hint. This is not verified as part of
 the macaroon.
 
+#### func (*Macaroon) MarshalJSON
+
+```go
+func (m *Macaroon) MarshalJSON() ([]byte, error)
+```
+MarshalJSON implements json.Marshaler.
+
 #### func (*Macaroon) Signature
 
 ```go
 func (m *Macaroon) Signature() []byte
 ```
 Signature returns the macaroon's signature.
+
+#### func (*Macaroon) UnmarshalJSON
+
+```go
+func (m *Macaroon) UnmarshalJSON(jsonData []byte) error
+```
+UnmarshalJSON implements json.Unmarshaler.
 
 #### func (*Macaroon) Verify
 
@@ -130,7 +166,7 @@ ThirdPartyCaveatId holds the information encoded in a third-party caveat id.
 #### func  DecryptThirdPartyCaveatId
 
 ```go
-func DecryptThirdPartyCaveatId(secret, id []byte) (*ThirdPartyCaveatId, error)
+func DecryptThirdPartyCaveatId(secret []byte, id string) (*ThirdPartyCaveatId, error)
 ```
 DecryptThirdPartyCaveatId decrypts a third-party caveat id given the shared
 secret.
