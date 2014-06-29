@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -30,29 +31,34 @@ func targetService(endpoint, authEndpoint string) (http.Handler, error) {
 }
 
 func (srv *myServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	breq := srv.svc.NewRequest(srv.checkers(req))
+	breq := srv.svc.NewRequest(req, srv.checkers(req))
 	if err := breq.Check("can-access-me"); err != nil {
 		srv.writeError(w, err)
 		return
 	}
-	fmt.Fprintf(w, "success\n")
+	fmt.Fprintf(w, "hello, world\n")
 }
 
 func (svc *myServer) checkers(req *http.Request) bakery.FirstPartyChecker {
-	return checkers.Map{
-		"remote-address": func(s string) error {
+	m := checkers.Map{
+		"remote-host": func(s string) error {
 			// TODO(rog) do we want to distinguish between
 			// the two kinds of errors below?
-			_, addr, err := checkers.ParseCaveat(s)
+			_, host, err := checkers.ParseCaveat(s)
 			if err != nil {
 				return err
 			}
-			if req.RemoteAddr != addr {
-				return fmt.Errorf("remote address mismatch (need %q)", addr)
+			remoteHost, _, err := net.SplitHostPort(req.RemoteAddr)
+			if err != nil {
+				return fmt.Errorf("cannot parse request remote address")
+			}
+			if remoteHost != host {
+				return fmt.Errorf("remote address mismatch (need %q, got %q)", host, remoteHost)
 			}
 			return nil
 		},
 	}
+	return checkers.PushFirstPartyChecker(m, checkers.Std)
 }
 
 func (srv *myServer) writeError(w http.ResponseWriter, err error) {

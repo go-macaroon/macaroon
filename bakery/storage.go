@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 )
 
@@ -40,6 +41,7 @@ type memStorage struct {
 }
 
 func (s memStorage) Put(location, item string) error {
+	log.Printf("storage.Put[%q] %q", location, item)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.values[location] = item
@@ -51,8 +53,10 @@ func (s memStorage) Get(location string) (string, error) {
 	defer s.mu.Unlock()
 	item, ok := s.values[location]
 	if !ok {
+		log.Printf("storage.Get[%q] -> not found", location)
 		return "", ErrNotFound
 	}
+	log.Printf("storage.Get[%q] -> %q", location, item)
 	return item, nil
 }
 

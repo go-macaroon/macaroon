@@ -126,17 +126,17 @@ type thirdPartyCaveatIdRecord struct {
 	Condition string
 }
 
-type createResponse struct {
-	CaveatId string
-}
-
 func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	condition := req.Form.Get("condition")
 	rootKeyStr := req.Form.Get("root-key")
 
-	if len(condition) == 0 || len(rootKeyStr) == 0 {
-		d.badRequest(w, "empty values for condition or root key")
+	if len(condition) == 0 {
+		d.badRequest(w, "empty value for condition")
+		return
+	}
+	if len(rootKeyStr) == 0 {
+		d.badRequest(w, "empty value for root key")
 		return
 	}
 	rootKey, err := base64.StdEncoding.DecodeString(rootKeyStr)
@@ -150,7 +150,7 @@ func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request)
 		d.internalError(w, "cannot generate random key: %v", err)
 		return
 	}
-	internalId := fmt.Sprintf("third-party-%x", idBytes)
+	id := fmt.Sprintf("%x", idBytes)
 	recordBytes, err := json.Marshal(thirdPartyCaveatIdRecord{
 		Condition: condition,
 		RootKey:   rootKey,
@@ -159,20 +159,13 @@ func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request)
 		d.internalError(w, "cannot marshal caveat id record: %v", err)
 		return
 	}
-	err = d.svc.Store().Put(internalId, string(recordBytes))
+	err = d.svc.Store().Put(id, string(recordBytes))
 	if err != nil {
 		d.internalError(w, "cannot store caveat id record: %v", err)
 		return
 	}
-	tpidBytes, err := json.Marshal(&thirdPartyCaveatId{
-		Id: internalId,
-	})
-	if err != nil {
-		d.internalError(w, "cannot marshal caveat id: %v", err)
-		return
-	}
-	respBytes, err := json.Marshal(createResponse{
-		CaveatId: base64.StdEncoding.EncodeToString(tpidBytes),
+	respBytes, err := json.Marshal(caveatIdResponse{
+		CaveatId: id,
 	})
 	if err != nil {
 		d.internalError(w, "cannot marshal caveat response: %v", err)

@@ -197,6 +197,7 @@ func (svc *Service) NewMacaroon(id string, rootKey []byte, capability string, ca
 
 // AddCaveat adds a caveat to the given macaroon.
 func (svc *Service) AddCaveat(m *macaroon.Macaroon, cav Caveat) error {
+	log.Printf("Service.AddCaveat id %q; cav %#v", m.Id(), cav)
 	if cav.Location == "" {
 		m.AddFirstPartyCaveat(cav.Condition)
 		return nil
@@ -226,14 +227,17 @@ func randomBytes(n int) ([]byte, error) {
 
 // Check checks that the client has the given capability.
 // If the verification fails in a way which might be remediable,
-// it returns a VerificatonError that describes the error.
+// it returns a VerificationError that describes the error.
 func (req *Request) Check(capability string) error {
 	req.mu.Lock()
 	defer req.mu.Unlock()
 	possibleMacaroons := req.capability[capability]
 	if len(possibleMacaroons) == 0 {
 		// no macaroons discharging the capability.
-		return fmt.Errorf("no possible macaroons found")
+		return &VerificationError{
+			RequiredCapability: capability,
+			Reason:             fmt.Errorf("no possible macaroons found"),
+		}
 	}
 	// TODO consider making it possible to run verifications
 	// concurrently (possibly using something like single-flight).
@@ -253,7 +257,13 @@ func (req *Request) Check(capability string) error {
 	}
 }
 
-var ErrCaveatNotRecognized = fmt.Errorf("caveat not recognized")
+type CaveatNotRecognizedError struct {
+	Caveat string
+}
+
+func (e *CaveatNotRecognizedError) Error() string {
+	return fmt.Sprintf("caveat %q not recognized", e.Caveat)
+}
 
 type VerificationError struct {
 	RequiredCapability string

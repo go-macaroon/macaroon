@@ -15,7 +15,7 @@ func main() {
 }
 
 func serve(newHandler func(string) (http.Handler, error)) (endpointURL string) {
-	listener, err := net.Listen("tcp", ":0")
+	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		log.Fatal(err)
 	}

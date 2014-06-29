@@ -1,7 +1,6 @@
 package checkers
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -9,27 +8,16 @@ import (
 	"github.com/rogpeppe/macaroon/bakery"
 )
 
-type StructuredCaveat struct {
-	Identifier string
-	Args       []interface{}
+func FirstParty(condition string) bakery.Caveat {
+	return bakery.Caveat{
+		Condition: condition,
+	}
 }
 
-func FirstParty(identifier string, args ...interface{}) bakery.Caveat {
-	return ThirdParty("", identifier, args...)
-}
-
-func ThirdParty(location, identifier string, args ...interface{}) bakery.Caveat {
-	c := StructuredCaveat{
-		Identifier: identifier,
-		Args:       args,
-	}
-	data, err := json.Marshal(c)
-	if err != nil {
-		panic(fmt.Errorf("cannot marshal %#v: %v", c, err))
-	}
+func ThirdParty(location, condition string) bakery.Caveat {
 	return bakery.Caveat{
 		Location:  location,
-		Condition: string(data),
+		Condition: condition,
 	}
 }
 
@@ -38,7 +26,9 @@ var Std = Map{
 }
 
 func TimeBefore(t time.Time) bakery.Caveat {
-	return ThirdParty("time-before", t.Format(time.RFC3339))
+	return bakery.Caveat{
+		Condition: "time-before " + t.Format(time.RFC3339),
+	}
 }
 
 func timeBefore(cav string) error {
@@ -66,7 +56,7 @@ func (m Map) CheckFirstPartyCaveat(cav string) error {
 	if c := m[id]; c != nil {
 		return c.CheckFirstPartyCaveat(cav)
 	}
-	return bakery.ErrCaveatNotRecognized
+	return &bakery.CaveatNotRecognizedError{cav}
 }
 
 // PushFirstPartyChecker returns a checker that first
@@ -75,7 +65,7 @@ func (m Map) CheckFirstPartyCaveat(cav string) error {
 func PushFirstPartyChecker(c0, c1 bakery.FirstPartyChecker) bakery.FirstPartyChecker {
 	f := func(caveat string) error {
 		err := c0.CheckFirstPartyCaveat(caveat)
-		if err == bakery.ErrCaveatNotRecognized {
+		if _, ok := err.(*bakery.CaveatNotRecognizedError); ok {
 			err = c1.CheckFirstPartyCaveat(caveat)
 		}
 		return err

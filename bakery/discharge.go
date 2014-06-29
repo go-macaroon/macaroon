@@ -1,6 +1,11 @@
 package bakery
 
-import "github.com/rogpeppe/macaroon"
+import (
+	"fmt"
+	"log"
+
+	"github.com/rogpeppe/macaroon"
+)
 
 // NewMacaroon mints a new macaroon with the given id, capability and caveats.
 // If the id is empty, a random id will be used.
@@ -25,9 +30,10 @@ type Discharger struct {
 // Discharge creates a macaroon that discharges the third party
 // caveat with the given id.
 func (d *Discharger) Discharge(id string) (*macaroon.Macaroon, error) {
+	log.Printf("server attempting to discharge %q", id)
 	rootKey, condition, err := d.Decoder.DecodeCaveatId(id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("discharger cannot decode caveat id: %v", err)
 	}
 	caveats, err := d.Checker.CheckThirdPartyCaveat(condition)
 	if err != nil {

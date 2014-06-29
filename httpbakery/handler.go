@@ -14,6 +14,8 @@ type dischargeRequestedResponse struct {
 	Macaroon  *macaroon.Macaroon
 }
 
+const codeDischargeRequired = "macaroon discharge required"
+
 // WriteDischargeRequiredError writes a response to w that reports the
 // given error and sends the given macaroon to the client, indicating
 // that it should be discharged to allow the original request to be
@@ -35,7 +37,7 @@ func WriteDischargeRequiredError(w http.ResponseWriter, m *macaroon.Macaroon, or
 	}
 	respData, err := json.Marshal(dischargeRequestedResponse{
 		Error:     originalErr.Error(),
-		ErrorCode: "macaroon discharge required",
+		ErrorCode: codeDischargeRequired,
 		Macaroon:  m,
 	})
 	if err != nil {

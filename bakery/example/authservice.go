@@ -24,11 +24,11 @@ func authService(endpoint string) (http.Handler, error) {
 
 func thirdPartyChecker(req *http.Request, condition string) ([]bakery.Caveat, error) {
 	if condition != "access-allowed" {
-		return nil, bakery.ErrCaveatNotRecognized
+		return nil, &bakery.CaveatNotRecognizedError{condition}
 	}
 	// TODO check that the HTTP request has cookies that prove
 	// something about the client.
 	return []bakery.Caveat{{
-		Condition: "peer-is localhost",
+		Condition: "remote-host 127.0.0.1",
 	}}, nil
 }
