@@ -3,6 +3,7 @@ package macaroon_test
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/rogpeppe/macaroon"
@@ -18,8 +19,8 @@ type macaroonSuite struct{}
 
 var _ = gc.Suite(&macaroonSuite{})
 
-func never(string) (bool, error) {
-	return false, nil
+func never(string) error {
+	return fmt.Errorf("condition is never true")
 }
 
 func (*macaroonSuite) TestNoCaveats(c *gc.C) {
@@ -28,9 +29,8 @@ func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 	c.Assert(m.Location(), gc.Equals, "a location")
 	c.Assert(string(m.Id()), gc.Equals, "some id")
 
-	ok, err := m.Verify(rootKey, never, nil)
+	err := m.Verify(rootKey, never, nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(ok, gc.Equals, true)
 }
 
 func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
@@ -46,16 +46,24 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 	for cav := range caveats {
 		m.AddFirstPartyCaveat(cav)
 	}
-
-	check := func(cav string) (bool, error) {
+	expectErr := fmt.Errorf("condition not met")
+	check := func(cav string) error {
 		tested[cav] = true
-		return caveats[cav], nil
+		if caveats[cav] {
+			return nil
+		}
+		return expectErr
 	}
-	ok, err := m.Verify(rootKey, check, nil)
+	err := m.Verify(rootKey, check, nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(ok, gc.Equals, true)
 
 	c.Assert(tested, gc.DeepEquals, caveats)
+
+	m.AddFirstPartyCaveat("not met")
+	err = m.Verify(rootKey, check, nil)
+	c.Assert(err, gc.Equals, expectErr)
+
+	c.Assert(tested["not met"], gc.Equals, true)
 }
 
 func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
@@ -69,11 +77,10 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 
 	dm := macaroon.New(dischargeRootKey, thirdPartyCaveatId, "remote location")
 	dm.Bind(m.Signature())
-	ok, err := m.Verify(rootKey, never, map[string]*macaroon.Macaroon{
+	err = m.Verify(rootKey, never, map[string]*macaroon.Macaroon{
 		thirdPartyCaveatId: dm,
 	})
 	c.Assert(err, gc.IsNil)
-	c.Assert(ok, gc.Equals, true)
 }
 
 func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
