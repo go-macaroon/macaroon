@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	_ "net/http"
 	"github.com/rogpeppe/macaroon"
 	gc "gopkg.in/check.v1"
+	_ "net/http"
 )
 
 func TestPackage(t *testing.T) {
@@ -62,18 +62,15 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
 	m := macaroon.New(rootKey, "some id", "a location")
 
-	sharedSecret := []byte("shared secret")
-	id, err := m.AddThirdPartyCaveat(sharedSecret, "3rd party caveat", "remote.com")
+	dischargeRootKey := []byte("shared root key")
+	thirdPartyCaveatId := "3rd party caveat"
+	err := m.AddThirdPartyCaveat(dischargeRootKey, thirdPartyCaveatId, "remote.com")
 	c.Assert(err, gc.IsNil)
 
-	// This section would be done on the third party server.
-	caveat, err := macaroon.DecryptThirdPartyCaveatId(sharedSecret, id)
-	c.Assert(err, gc.IsNil)
-
-	dm := macaroon.New(caveat.RootKey, id, "remote location")
+	dm := macaroon.New(dischargeRootKey, thirdPartyCaveatId, "remote location")
 	dm.Bind(m.Signature())
 	ok, err := m.Verify(rootKey, never, map[string]*macaroon.Macaroon{
-		string(id): dm,
+		thirdPartyCaveatId: dm,
 	})
 	c.Assert(err, gc.IsNil)
 	c.Assert(ok, gc.Equals, true)

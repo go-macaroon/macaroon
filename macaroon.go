@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -53,7 +52,6 @@ type caveatJSON struct {
 
 // MarshalJSON implements json.Marshaler.
 func (cav *Caveat) MarshalJSON() ([]byte, error) {
-
 	cavJSON := caveatJSON{
 		Location: cav.location,
 		CID:      cav.caveatId,
@@ -155,54 +153,19 @@ func (m *Macaroon) AddFirstPartyCaveat(caveatId string) {
 	m.addCaveat(caveatId, nil, "")
 }
 
-// ThirdPartyCaveatId holds the information encoded in
-// a third-party caveat id.
-type ThirdPartyCaveatId struct {
-	RootKey []byte
-	Caveat  string
-}
-
-// DecryptThirdPartyCaveatId decrypts a third-party caveat
-// id given the shared secret.
-func DecryptThirdPartyCaveatId(secret []byte, id string) (*ThirdPartyCaveatId, error) {
-	decodedId, err := base64.StdEncoding.DecodeString(id)
-	if err != nil {
-		return nil, err
-	}
-	plain, err := decrypt(secret, decodedId)
-	if err != nil {
-		return nil, err
-	}
-	var c ThirdPartyCaveatId
-	if err := json.Unmarshal(plain, &c); err != nil {
-		return nil, fmt.Errorf("cannot unmarshal decrypted caveat id: %v", err)
-	}
-	return &c, nil
-}
-
 // AddThirdPartyCaveat adds a third-party caveat to the macaroon,
-// using the given shared secret, caveat and location hint.
-// It returns the caveat id of the third party macaroon.
-func (m *Macaroon) AddThirdPartyCaveat(thirdPartySecret []byte, caveat string, loc string) (id string, err error) {
-	nonce, err := newNonce()
+// using the given shared root key, caveat id and location hint.
+// The caveat id should encode the root key in some
+// way, either by encrypting it with a key known to the third party
+// or by holding a reference to it stored in the third party's
+// storage.
+func (m *Macaroon) AddThirdPartyCaveat(rootKey []byte, caveatId string, loc string) error {
+	verificationId, err := encrypt(m.sig, rootKey)
 	if err != nil {
-		return "", err
+		return err
 	}
-	data, err := json.Marshal(ThirdPartyCaveatId{nonce[:], caveat})
-	if err != nil {
-		return "", err
-	}
-	caveatId, err := encrypt(thirdPartySecret, data)
-	if err != nil {
-		return "", err
-	}
-	verificationId, err := encrypt(m.sig, nonce[:])
-	if err != nil {
-		return "", err
-	}
-	encCaveatId := base64.StdEncoding.EncodeToString(caveatId)
-	m.addCaveat(encCaveatId, verificationId, loc)
-	return encCaveatId, nil
+	m.addCaveat(caveatId, verificationId, loc)
+	return nil
 }
 
 // bndForRequest binds the given macaroon
