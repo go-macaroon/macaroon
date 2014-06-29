@@ -71,11 +71,12 @@ AddFirstPartyCaveat adds a caveat that will be verified by the target service.
 #### func (*Macaroon) AddThirdPartyCaveat
 
 ```go
-func (m *Macaroon) AddThirdPartyCaveat(thirdPartySecret []byte, caveat string, loc string) (id string, err error)
+func (m *Macaroon) AddThirdPartyCaveat(rootKey []byte, caveatId string, loc string) error
 ```
 AddThirdPartyCaveat adds a third-party caveat to the macaroon, using the given
-shared secret, caveat and location hint. It returns the caveat id of the third
-party macaroon.
+shared root key, caveat id and location hint. The caveat id should encode the
+root key in some way, either by encrypting it with a key known to the third
+party or by holding a reference to it stored in the third party's storage.
 
 #### func (*Macaroon) Bind
 
@@ -140,36 +141,18 @@ UnmarshalJSON implements json.Unmarshaler.
 #### func (*Macaroon) Verify
 
 ```go
-func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) (bool, error), discharges map[string]*Macaroon) (bool, error)
+func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges map[string]*Macaroon) error
 ```
 Verify verifies that the receiving macaroon is valid. The root key must be the
 same that the macaroon was originally minted with. The check function is called
-to verify each first-party caveat - it may return an error the check cannot be
-made but the answer is not necessarily false. The discharge macaroons should be
-passed in discharges, keyed by macaroon id.
+to verify each first-party caveat - it should return an error if the condition
+is not met.
+
+The discharge macaroons should be provided in discharges.
 
 Verify returns true if the verification succeeds; if returns (false, nil) if the
 verification fails, and (false, err) if the verification cannot be asserted (but
 may not be false).
-
-#### type ThirdPartyCaveatId
-
-```go
-type ThirdPartyCaveatId struct {
-	RootKey []byte
-	Caveat  string
-}
-```
-
-ThirdPartyCaveatId holds the information encoded in a third-party caveat id.
-
-#### func  DecryptThirdPartyCaveatId
-
-```go
-func DecryptThirdPartyCaveatId(secret []byte, id string) (*ThirdPartyCaveatId, error)
-```
-DecryptThirdPartyCaveatId decrypts a third-party caveat id given the shared
-secret.
 
 #### type Verifier
 
