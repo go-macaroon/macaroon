@@ -12,44 +12,11 @@ Cookies with Contextual Caveats for Decentralized Authorization in the Cloud"
 
 ```go
 type Caveat struct {
+	Id       string
+	Location string
 }
 ```
 
-Caveat holds a first person or third party caveat.
-
-#### func (*Caveat) Id
-
-```go
-func (cav *Caveat) Id() string
-```
-
-#### func (*Caveat) IsThirdParty
-
-```go
-func (cav *Caveat) IsThirdParty() bool
-```
-IsThirdParty reports whether the caveat must be satisfied by some third party
-(if not, it's a first person caveat).
-
-#### func (*Caveat) Location
-
-```go
-func (cav *Caveat) Location() string
-```
-
-#### func (*Caveat) MarshalJSON
-
-```go
-func (cav *Caveat) MarshalJSON() ([]byte, error)
-```
-MarshalJSON implements json.Marshaler.
-
-#### func (*Caveat) UnmarshalJSON
-
-```go
-func (cav *Caveat) UnmarshalJSON(jsonData []byte) error
-```
-unmarshalJSON implements json.Unmarshaler.
 
 #### type Macaroon
 
@@ -66,14 +33,14 @@ to avoid unwanted mutation.
 #### func  New
 
 ```go
-func New(rootKey []byte, id, loc string) *Macaroon
+func New(rootKey []byte, id, loc string) (*Macaroon, error)
 ```
 New returns a new macaroon with the given root key, identifier and location.
 
 #### func (*Macaroon) AddFirstPartyCaveat
 
 ```go
-func (m *Macaroon) AddFirstPartyCaveat(caveatId string)
+func (m *Macaroon) AddFirstPartyCaveat(caveatId string) error
 ```
 AddFirstPartyCaveat adds a caveat that will be verified by the target service.
 
@@ -548,21 +515,6 @@ type Map map[string]bakery.FirstPartyCheckerFunc
 ```go
 func (m Map) CheckFirstPartyCaveat(cav string) error
 ```
-# example
---
-This example demonstrates three components:
-
-- A target service, representing a web server that wishes to use macaroons for
-authorization. It delegates authorization to a third-party authorization server
-by adding third-party caveats to macaroons that it sends to the user.
-
-- A client, representing a client wanting to make requests to the server.
-
-- An authorization server.
-
-In a real system, these three components would live on different machines; the
-client component could also be a web browser. (TODO: write javascript discharge
-gatherer)
 # httpbakery
 --
     import "github.com/rogpeppe/macaroon/httpbakery"
