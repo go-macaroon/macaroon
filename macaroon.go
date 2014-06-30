@@ -23,6 +23,8 @@ type Macaroon struct {
 	id       string
 	caveats  []Caveat
 	sig      []byte
+
+	data []byte		// not yet used for real
 }
 
 // Caveat holds a first person or third party caveat.
