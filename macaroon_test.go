@@ -25,9 +25,9 @@ func never(string) error {
 
 func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 	rootKey := []byte("secret")
-	m := macaroon.New(rootKey, "some id", "a location")
+	m := MustNew(rootKey, "some id", "a location")
 	c.Assert(m.Location(), gc.Equals, "a location")
-	c.Assert(string(m.Id()), gc.Equals, "some id")
+	c.Assert(m.Id(), gc.Equals, "some id")
 
 	err := m.Verify(rootKey, never, nil)
 	c.Assert(err, gc.IsNil)
@@ -35,7 +35,7 @@ func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 
 func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := macaroon.New(rootKey, "some id", "a location")
+	m := MustNew(rootKey, "some id", "a location")
 
 	caveats := map[string]bool{
 		"a caveat":       true,
@@ -68,14 +68,14 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := macaroon.New(rootKey, "some id", "a location")
+	m := MustNew(rootKey, "some id", "a location")
 
 	dischargeRootKey := []byte("shared root key")
 	thirdPartyCaveatId := "3rd party caveat"
 	err := m.AddThirdPartyCaveat(dischargeRootKey, thirdPartyCaveatId, "remote.com")
 	c.Assert(err, gc.IsNil)
 
-	dm := macaroon.New(dischargeRootKey, thirdPartyCaveatId, "remote location")
+	dm := MustNew(dischargeRootKey, thirdPartyCaveatId, "remote location")
 	dm.Bind(m.Signature())
 	err = m.Verify(rootKey, never, []*macaroon.Macaroon{dm})
 	c.Assert(err, gc.IsNil)
@@ -402,7 +402,7 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 
 func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	rootKey := []byte("secret")
-	m0 := macaroon.New(rootKey, "some id", "a location")
+	m0 := MustNew(rootKey, "some id", "a location")
 	m0.AddFirstPartyCaveat("account = 3735928559")
 	m0JSON, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
@@ -454,7 +454,7 @@ func makeMacaroons(mspecs []macaroonSpec) (
 ) {
 	var macaroons []*macaroon.Macaroon
 	for _, mspec := range mspecs {
-		m := macaroon.New([]byte(mspec.rootKey), mspec.id, mspec.location)
+		m := MustNew([]byte(mspec.rootKey), mspec.id, mspec.location)
 		for _, cav := range mspec.caveats {
 			if cav.location != "" {
 				err := m.AddThirdPartyCaveat([]byte(cav.rootKey), cav.condition, cav.location)

@@ -10,7 +10,7 @@ import (
 	"code.google.com/p/go.crypto/nacl/secretbox"
 )
 
-func keyedHash(key []byte, text string) []byte {
+func keyedHash(key, text []byte) []byte {
 	h := keyedHasher(key)
 	h.Write([]byte(text))
 	return h.Sum(nil)

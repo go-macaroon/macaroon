@@ -37,6 +37,10 @@ func (m *Macaroon) dataBytes(p packet) []byte {
 	return m.data[p.start+int32(p.headerLen) : p.start+int32(p.totalLen)]
 }
 
+func (m *Macaroon) dataStr(p packet) string {
+	return string(m.dataBytes(p))
+}
+
 // packetBytes returns the entire packet.
 func (m *Macaroon) packetBytes(p packet) []byte {
 	return m.data[p.start : p.start+int32(p.totalLen)]
@@ -44,6 +48,9 @@ func (m *Macaroon) packetBytes(p packet) []byte {
 
 // fieldName returns the field name of the packet.
 func (m *Macaroon) fieldName(p packet) []byte {
+	if p.totalLen == 0 {
+		return nil
+	}
 	return m.data[p.start+4 : p.start+int32(p.headerLen)-1]
 }
 
@@ -77,10 +84,12 @@ const maxPacketLen = 0xffff
 
 // appendPacket appends a packet with the given field name
 // and data to m.data, and returns the packet appended.
-func (m *Macaroon) appendPacket(field string, data []byte) (packet, error) {
+//
+// It returns false (and a zero packet) if the packet was too big.
+func (m *Macaroon) appendPacket(field string, data []byte) (packet, bool) {
 	plen := 4 + len(field) + 1 + len(data)
 	if plen > maxPacketLen {
-		return packet{}, fmt.Errorf("field %q is too big for macaroon", field)
+		return packet{}, false
 	}
 	s := packet{
 		start:     int32(len(m.data)),
@@ -91,7 +100,7 @@ func (m *Macaroon) appendPacket(field string, data []byte) (packet, error) {
 	m.data = append(m.data, field...)
 	m.data = append(m.data, ' ')
 	m.data = append(m.data, data...)
-	return s, nil
+	return s, true
 }
 
 var hexDigits = []byte("0123456789abcdef")
