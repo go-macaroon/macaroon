@@ -2,6 +2,7 @@ package macaroon
 
 import (
 	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 )
@@ -38,9 +39,9 @@ type macaroonJSON struct {
 
 // caveatJSON defines the JSON format for caveats within a macaroon.
 type caveatJSON struct {
-	Location string `json:"location"`
 	CID      string `json:"cid"`
-	VID      string `json:"vid"`
+	VID      string `json:"vid,omitempty"`
+	Location string `json:"cl,omitempty"`
 }
 
 // MarshalJSON implements json.Marshaler.
@@ -55,7 +56,7 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 		mjson.Caveats[i] = caveatJSON{
 			Location: m.dataStr(cav.location),
 			CID:      m.dataStr(cav.caveatId),
-			VID:      m.dataStr(cav.verificationId),
+			VID:      base64.StdEncoding.EncodeToString(m.dataBytes(cav.verificationId)),
 		}
 	}
 	data, err := json.Marshal(mjson)
@@ -81,7 +82,7 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	}
 	m.caveats = m.caveats[:0]
 	for _, cav := range mjson.Caveats {
-		vid, err := hex.DecodeString(cav.VID)
+		vid, err := base64.StdEncoding.DecodeString(cav.VID)
 		if err != nil {
 			return fmt.Errorf("cannot decode verification id %q: %v", cav.VID, err)
 		}
