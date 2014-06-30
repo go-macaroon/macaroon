@@ -23,7 +23,7 @@ func BenchmarkNew(b *testing.B) {
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
 	b.ResetTimer()
 	for i := b.N - 1; i >= 0; i-- {
-		macaroon.New(rootKey, id, loc)
+		MustNew(rootKey, id, loc)
 	}
 }
 
@@ -34,7 +34,7 @@ func BenchmarkAddCaveat(b *testing.B) {
 	b.ResetTimer()
 	for i := b.N - 1; i >= 0; i-- {
 		b.StopTimer()
-		m := macaroon.New(rootKey, id, loc)
+		m := MustNew(rootKey, id, loc)
 		b.StartTimer()
 		m.AddFirstPartyCaveat("some caveat stuff")
 	}
@@ -72,7 +72,7 @@ func BenchmarkMarshalJSON(b *testing.B) {
 	rootKey := randomBytes(24)
 	id := base64.StdEncoding.EncodeToString(randomBytes(100))
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
-	m := macaroon.New(rootKey, id, loc)
+	m := MustNew(rootKey, id, loc)
 	b.ResetTimer()
 	for i := b.N - 1; i >= 0; i-- {
 		_, err := m.MarshalJSON()
@@ -80,14 +80,21 @@ func BenchmarkMarshalJSON(b *testing.B) {
 			b.Fatalf("cannot marshal JSON: %v", err)
 		}
 	}
+}
 
+func MustNew(rootKey []byte, id, loc string) *macaroon.Macaroon {
+	m, err := macaroon.New(rootKey, id, loc)
+	if err != nil {
+		panic(err)
+	}
+	return m
 }
 
 func BenchmarkUnmarshalJSON(b *testing.B) {
 	rootKey := randomBytes(24)
 	id := base64.StdEncoding.EncodeToString(randomBytes(100))
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
-	m := macaroon.New(rootKey, id, loc)
+	m := MustNew(rootKey, id, loc)
 	data, err := m.MarshalJSON()
 	if err != nil {
 		b.Fatalf("cannot marshal JSON: %v", err)

@@ -12,8 +12,8 @@ var _ = gc.Suite(&packetSuite{})
 
 func (*packetSuite) TestAppendPacket(c *gc.C) {
 	var m Macaroon
-	p, err := m.appendPacket("field", []byte("some data"))
-	c.Assert(err, gc.IsNil)
+	p, ok := m.appendPacket("field", []byte("some data"))
+	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(m.data), gc.Equals, "0013field some data")
 	c.Assert(p, gc.Equals, packet{
 		start:     0,
@@ -21,8 +21,8 @@ func (*packetSuite) TestAppendPacket(c *gc.C) {
 		headerLen: 10,
 	})
 
-	p, err = m.appendPacket("otherfield", []byte("more and more data"))
-	c.Assert(err, gc.IsNil)
+	p, ok = m.appendPacket("otherfield", []byte("more and more data"))
+	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(m.data), gc.Equals, "0013field some data0021otherfield more and more data")
 	c.Assert(p, gc.Equals, packet{
 		start:     19,
@@ -34,32 +34,32 @@ func (*packetSuite) TestAppendPacket(c *gc.C) {
 func (*packetSuite) TestAppendPacketTooBig(c *gc.C) {
 	var m Macaroon
 	data := make([]byte, 65532)
-	p, err := m.appendPacket("field", data)
-	c.Assert(err, gc.ErrorMatches, `field "field" is too big for macaroon`)
+	p, ok := m.appendPacket("field", data)
+	c.Assert(ok, gc.Equals, false)
 	c.Assert(p, gc.Equals, packet{})
 }
 
 func (*packetSuite) TestDataBytes(c *gc.C) {
 	var m Macaroon
 	m.appendPacket("first", []byte("first data"))
-	p, err := m.appendPacket("field", []byte("some data"))
-	c.Assert(err, gc.IsNil)
+	p, ok := m.appendPacket("field", []byte("some data"))
+	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(m.dataBytes(p)), gc.Equals, "some data")
 }
 
 func (*packetSuite) TestPacketBytes(c *gc.C) {
 	var m Macaroon
 	m.appendPacket("first", []byte("first data"))
-	p, err := m.appendPacket("field", []byte("some data"))
-	c.Assert(err, gc.IsNil)
+	p, ok := m.appendPacket("field", []byte("some data"))
+	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(m.packetBytes(p)), gc.Equals, "0013field some data")
 }
 
 func (*packetSuite) TestFieldName(c *gc.C) {
 	var m Macaroon
 	m.appendPacket("first", []byte("first data"))
-	p, err := m.appendPacket("field", []byte("some data"))
-	c.Assert(err, gc.IsNil)
+	p, ok := m.appendPacket("field", []byte("some data"))
+	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(m.fieldName(p)), gc.Equals, "field")
 }
 
@@ -131,8 +131,8 @@ func (*packetSuite) TestParsePacket(c *gc.C) {
 
 		// append the same packet again and check that
 		// the contents are the same.
-		p1, err := m.appendPacket(test.expectField, []byte(test.expectData))
-		c.Assert(err, gc.IsNil)
+		p1, ok := m.appendPacket(test.expectField, []byte(test.expectData))
+		c.Assert(ok, gc.Equals, true)
 		c.Assert(string(m.packetBytes(p)), gc.Equals, string(m.packetBytes(p1)))
 	}
 }
