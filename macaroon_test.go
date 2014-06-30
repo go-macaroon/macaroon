@@ -441,7 +441,7 @@ func (*macaroonSuite) TestJSONRoundTrip(c *gc.C) {
 	var original interface{}
 	err = json.Unmarshal([]byte(jsonData), &original)
 	c.Assert(err, gc.IsNil)
-	
+
 	c.Assert(got, gc.DeepEquals, original)
 }
 

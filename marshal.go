@@ -1,8 +1,8 @@
 package macaroon
 
 import (
-	"encoding/hex"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 )
