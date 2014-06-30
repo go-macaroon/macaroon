@@ -78,12 +78,12 @@ func addCookie(req *http.Request, m *macaroon.Macaroon) error {
 func dischargeMacaroon(m *macaroon.Macaroon) ([]*macaroon.Macaroon, error) {
 	var macaroons []*macaroon.Macaroon
 	for _, cav := range m.Caveats() {
-		if cav.Location() == "" {
+		if cav.Location == "" {
 			continue
 		}
 		m, err := obtainThirdPartyDischarge(m.Location(), cav)
 		if err != nil {
-			return nil, fmt.Errorf("cannot obtain discharge from %q: %v", cav.Location(), err)
+			return nil, fmt.Errorf("cannot obtain discharge from %q: %v", cav.Location, err)
 		}
 		macaroons = append(macaroons, m)
 	}
@@ -93,9 +93,9 @@ func dischargeMacaroon(m *macaroon.Macaroon) ([]*macaroon.Macaroon, error) {
 func obtainThirdPartyDischarge(originalLocation string, cav macaroon.Caveat) (*macaroon.Macaroon, error) {
 	var resp dischargeResponse
 	if err := postFormJSON(
-		appendURLElem(cav.Location(), "discharge"),
+		appendURLElem(cav.Location, "discharge"),
 		url.Values{
-			"id":       {cav.Id()},
+			"id":       {cav.Id},
 			"location": {originalLocation},
 		},
 		&resp,

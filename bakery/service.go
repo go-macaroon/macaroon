@@ -159,7 +159,10 @@ func (svc *Service) NewMacaroon(id string, rootKey []byte, capability string, ca
 		}
 		id = fmt.Sprintf("%x", idBytes)
 	}
-	m := macaroon.New(rootKey, id, svc.location)
+	m, err := macaroon.New(rootKey, id, svc.location)
+	if err != nil {
+		return nil, fmt.Errorf("cannot bake macaroon: %v", err)
+	}
 
 	// TODO look at the caveats for expiry time and associate
 	// that with the storage item so that the storage can
