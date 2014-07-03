@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 
@@ -57,7 +56,6 @@ func Do(c *http.Client, req *http.Request) (*http.Response, error) {
 			return nil, fmt.Errorf("cannot add cookie: %v", err)
 		}
 	}
-	log.Printf("trying again...")
 	// Try again with our newly acquired discharge macaroons
 	return c.Do(req)
 }
