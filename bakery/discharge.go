@@ -2,7 +2,6 @@ package bakery
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/rogpeppe/macaroon"
 )
@@ -39,7 +38,7 @@ type Discharger struct {
 // can eventually be associated with a client request using
 // AddClientMacaroon.
 func (d *Discharger) Discharge(id string) (*macaroon.Macaroon, error) {
-	log.Printf("server attempting to discharge %q", id)
+	logf("server attempting to discharge %q", id)
 	rootKey, condition, err := d.Decoder.DecodeCaveatId(id)
 	if err != nil {
 		return nil, fmt.Errorf("discharger cannot decode caveat id: %v", err)

@@ -76,20 +76,19 @@ func (svc *Service) AddPublicKeyForLocation(loc string, prefix bool, publicKey *
 // found. Mmm.
 func (svc *Service) NewRequest(httpReq *http.Request, checker bakery.FirstPartyChecker) *bakery.Request {
 	req := svc.Service.NewRequest(checker)
-	log.Printf("server found %d cookies", len(httpReq.Cookies()))
 	for _, cookie := range httpReq.Cookies() {
-		log.Printf("considering cookie %s", cookie.Name)
 		if !strings.HasPrefix(cookie.Name, "macaroon-") {
 			continue
 		}
 		data, err := base64.StdEncoding.DecodeString(cookie.Value)
 		if err != nil {
-			log.Printf("cannot base64-decode cookie: %v", err)
+			log.Printf("cannot base64-decode cookie; ignoring: %v", err)
 			continue
 		}
 		var m macaroon.Macaroon
 		if err := m.UnmarshalJSON(data); err != nil {
-			log.Printf("cannot unmarshal macaroon from cookie: %v", err)
+			log.Printf("cannot unmarshal macaroon from cookie; ignoring: %v", err)
+			continue
 		}
 		req.AddClientMacaroon(&m)
 	}

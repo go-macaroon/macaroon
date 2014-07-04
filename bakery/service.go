@@ -14,6 +14,14 @@ import (
 	"github.com/rogpeppe/macaroon"
 )
 
+const debug = false
+
+func logf(f string, a ...interface{}) {
+	if debug {
+		log.Printf(f, a...)
+	}
+}
+
 // Service represents a service which can use macaroons
 // to check authorization.
 type Service struct {
@@ -189,7 +197,7 @@ func (svc *Service) NewMacaroon(id string, rootKey []byte, capability string, ca
 // If it's a third-party caveat, it uses the service's caveat-id encoder
 // to create the id of the new caveat.
 func (svc *Service) AddCaveat(m *macaroon.Macaroon, cav Caveat) error {
-	log.Printf("Service.AddCaveat id %q; cav %#v", m.Id(), cav)
+	logf("Service.AddCaveat id %q; cav %#v", m.Id(), cav)
 	if cav.Location == "" {
 		m.AddFirstPartyCaveat(cav.Condition)
 		return nil

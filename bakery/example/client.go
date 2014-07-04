@@ -1,10 +1,9 @@
 package main
 
 import (
-	"io"
-	"log"
+	"fmt"
+	"io/ioutil"
 	"net/http"
-	"os"
 
 	"github.com/rogpeppe/macaroon/httpbakery"
 )
@@ -13,10 +12,10 @@ import (
 // In this simple example, it just tries a GET
 // request, which will fail unless the client
 // has the required authorization.
-func client(serverEndpoint string) {
+func clientRequest(serverEndpoint string) (string, error) {
 	req, err := http.NewRequest("GET", serverEndpoint, nil)
 	if err != nil {
-		log.Fatalf("new request error: %v", err)
+		return "", fmt.Errorf("new request error: %v", err)
 	}
 	// The Do function implements the mechanics
 	// of actually gathering discharge macaroons
@@ -24,9 +23,12 @@ func client(serverEndpoint string) {
 	// when necessary.
 	resp, err := httpbakery.Do(http.DefaultClient, req)
 	if err != nil {
-		log.Fatalf("GET failed: %v", err)
+		return "", fmt.Errorf("GET failed: %v", err)
 	}
 	defer resp.Body.Close()
-	log.Printf("GET %s succeeded. status %s", serverEndpoint, resp.Status)
-	io.Copy(os.Stdout, resp.Body)
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("cannot read response: %v", err)
+	}
+	return string(data), nil
 }
