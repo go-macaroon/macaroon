@@ -516,8 +516,6 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 	assertEqualMacaroons(c, m0, &m1)
 }
 
-//dataJSON := `{"caveats":[{"cid":"identifier","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAuIvUMAoGy\/8GRhby0KbMoSzr9L+lYyKNiib+Zos\/u5K6gqbeRIZqy\/KWDvca4U\/N","cl":"third party"}],"location":"somewhere","identifier":"id","signature":"dc15e42035f482200f3eb8240cb6e2306632ff3b02daa3dbe235381bf7688640"}`
-
 func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	// Test that a libmacaroon marshalled macaroon can be correctly unmarshaled
 	data, err := base64.StdEncoding.DecodeString(
