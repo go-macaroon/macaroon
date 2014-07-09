@@ -490,10 +490,17 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 	//
 	rootKey := []byte("secret")
 	m0 := MustNew(rootKey, "some id", "a location")
+	err := m0.AddFirstPartyCaveat("first caveat")
+	c.Assert(err, gc.IsNil)
+	err = m0.AddFirstPartyCaveat("second caveat")
+	c.Assert(err, gc.IsNil)
+	err = m0.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", "remote.com")
+	c.Assert(err, gc.IsNil)
 	data, err := m0.MarshalBinary()
 	c.Assert(err, gc.IsNil)
 	m1 := macaroon.Macaroon{}
-	m1.UnmarshalBinary(data)
+	err = m1.UnmarshalBinary(data)
+	c.Assert(err, gc.IsNil)
 	c.Assert(m0.Id(), gc.Equals, m1.Id())
 	c.Assert(m0.Location(), gc.Equals, m1.Location())
 	c.Assert(string(m0.Data()), gc.Equals, string(m1.Data()))
