@@ -488,6 +488,7 @@ func makeMacaroons(mspecs []macaroonSpec) (
 
 func assertEqualMacaroons(c *gc.C, m0, m1 *macaroon.Macaroon) {
 	m0json, err := m0.MarshalJSON()
+	c.Assert(err, gc.IsNil)
 	m1json, err := m1.MarshalJSON()
 	var m0val, m1val interface{}
 	err = json.Unmarshal(m0json, &m0val)
