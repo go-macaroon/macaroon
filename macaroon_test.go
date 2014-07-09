@@ -511,7 +511,7 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	data, err := m0.MarshalBinary()
 	c.Assert(err, gc.IsNil)
-	m1 := macaroon.Macaroon{}
+	var m1 macaroon.Macaroon
 	err = m1.UnmarshalBinary(data)
 	c.Assert(err, gc.IsNil)
 	assertEqualMacaroons(c, m0, &m1)
@@ -522,11 +522,11 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	data, err := base64.StdEncoding.DecodeString(
 		"MDAxN2xvY2F0aW9uIHNvbWV3aGVyZQowMDEyaWRlbnRpZmllciBpZAowMDEzY2lkIGlkZW50aWZpZXIKMDA1MXZpZCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4i9QwCgbL/wZGFvLQpsyhLOv0v6VjIo2KJv5miz+7krqCpt5EhmrL8pYO9xrhT80KMDAxM2NsIHRoaXJkIHBhcnR5CjAwMmZzaWduYXR1cmUg3BXkIDX0giAPPrgkDLbiMGYy/zsC2qPb4jU4G/dohkAK")
 	c.Assert(err, gc.IsNil)
-	m0 := macaroon.Macaroon{}
+	var m0 macaroon.Macaroon
 	err = m0.UnmarshalBinary(data)
 	c.Assert(err, gc.IsNil)
 	jsonData := []byte(`{"caveats":[{"cid":"identifier\n","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAuIvUMAoGy/8GRhby0KbMoSzr9L+lYyKNiib+Zos/u5K6gqbeRIZqy/KWDvca4U/NCg==","cl":"third party\n"}],"location":"somewhere\n","identifier":"id\n","signature":"dc15e42035f482200f3eb8240cb6e2306632ff3b02daa3dbe235381bf76886400a"}`)
-	m1 := macaroon.Macaroon{}
+	var m1 macaroon.Macaroon
 	err = m1.UnmarshalJSON(jsonData)
 	c.Assert(err, gc.IsNil)
 	assertEqualMacaroons(c, &m0, &m1)
