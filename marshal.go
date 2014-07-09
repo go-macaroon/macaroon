@@ -141,7 +141,7 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 			if cav.caveatId.len() != 0 {
 				m.caveats = append(m.caveats, cav)
 			}
-			// Removing the signature from data.
+			// Remove the signature from data.
 			m.data = m.data[0:p.start]
 			m.sig = append([]byte(nil), m.dataBytes(p)...)
 			return nil
