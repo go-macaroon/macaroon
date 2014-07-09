@@ -487,7 +487,8 @@ func makeMacaroons(mspecs []macaroonSpec) (
 }
 
 func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
-	//
+	// Test the binary marshalling and unmarshalling of a macaroon with
+	// first and third party caveats.
 	rootKey := []byte("secret")
 	m0 := MustNew(rootKey, "some id", "a location")
 	err := m0.AddFirstPartyCaveat("first caveat")
