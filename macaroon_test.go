@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	_ "net/http"
 	"github.com/rogpeppe/macaroon"
 	gc "gopkg.in/check.v1"
 )
