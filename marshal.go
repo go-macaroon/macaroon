@@ -161,6 +161,7 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 			}
 			cav.location = p
 		default:
+			return fmt.Errorf("unexpected field %q", field)
 		}
 	}
 	return nil
