@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
+	_ "net/http"
 	"github.com/rogpeppe/macaroon"
 	gc "gopkg.in/check.v1"
-	_ "net/http"
 )
 
 func TestPackage(t *testing.T) {
@@ -484,4 +484,17 @@ func makeMacaroons(mspecs []macaroonSpec) (
 		m.Bind(primary.Signature())
 	}
 	return []byte(mspecs[0].rootKey), primary, discharges
+}
+
+func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
+	//
+	rootKey := []byte("secret")
+	m0 := MustNew(rootKey, "some id", "a location")
+	data, err := m0.MarshalBinary()
+	c.Assert(err, gc.IsNil)
+	m1 := macaroon.Macaroon{}
+	m1.UnmarshalBinary(data)
+	c.Assert(m0.Id(), gc.Equals, m1.Id())
+	c.Assert(m0.Location(), gc.Equals, m1.Location())
+	c.Assert(string(m0.Data()), gc.Equals, string(m1.Data()))
 }

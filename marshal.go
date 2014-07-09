@@ -128,7 +128,6 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 	if err != nil {
 		return err
 	}
-
 	var cav caveat
 	for {
 		p, err := m.parsePacket(start)
@@ -142,6 +141,7 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 			if cav.caveatId.len() != 0 {
 				m.caveats = append(m.caveats, cav)
 			}
+			m.data = m.data[0:p.start]
 			m.sig = append([]byte(nil), m.dataBytes(p)...)
 			return nil
 		case fieldCaveatId:
@@ -163,10 +163,11 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 			return fmt.Errorf("unexpected field %q", field)
 		}
 	}
+	return nil
 }
 
 func (m *Macaroon) expectPacket(start int, kind string) (int, packet, error) {
-	p, err := m.parsePacket(0)
+	p, err := m.parsePacket(start)
 	if err != nil {
 		return 0, packet{}, err
 	}
