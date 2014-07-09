@@ -1,6 +1,6 @@
 package macaroon
 
-// Signature returns the macaroon's signature.
+// Data returns the macaroon's data.
 func (m *Macaroon) Data() []byte {
-	return append([]byte(nil), m.data...)
+	return m.data
 }
