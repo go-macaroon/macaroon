@@ -127,7 +127,7 @@ func (m *Macaroon) appendCaveat(caveatId string, verificationId []byte, loc stri
 		}
 	}
 	if loc != "" {
-		cav.location, ok = m.appendPacket(fieldLocation, []byte(loc))
+		cav.location, ok = m.appendPacket(fieldCaveatLocation, []byte(loc))
 		if !ok {
 			return nil, fmt.Errorf("caveat location too big")
 		}

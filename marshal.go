@@ -14,7 +14,7 @@ const (
 	fieldSignature      = "signature"
 	fieldCaveatId       = "cid"
 	fieldVerificationId = "vid"
-	fieldCaveatLocation = "location"
+	fieldCaveatLocation = "cl"
 )
 
 var (
