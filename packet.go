@@ -87,20 +87,30 @@ const maxPacketLen = 0xffff
 //
 // It returns false (and a zero packet) if the packet was too big.
 func (m *Macaroon) appendPacket(field string, data []byte) (packet, bool) {
+	mdata, p, ok := rawAppendPacket(m.data, field, data)
+	if !ok {
+		return p, false
+	}
+	m.data = mdata
+	return p, true
+}
+
+// rawAppendPacket appends a packet to the given byte slice.
+func rawAppendPacket(buf []byte, field string, data []byte) ([]byte, packet, bool) {
 	plen := 4 + len(field) + 1 + len(data)
 	if plen > maxPacketLen {
-		return packet{}, false
+		return nil, packet{}, false
 	}
 	s := packet{
-		start:     int32(len(m.data)),
+		start:     int32(len(buf)),
 		totalLen:  uint16(plen),
 		headerLen: uint16(4 + len(field) + 1),
 	}
-	m.data = appendSize(m.data, plen)
-	m.data = append(m.data, field...)
-	m.data = append(m.data, ' ')
-	m.data = append(m.data, data...)
-	return s, true
+	buf = appendSize(buf, plen)
+	buf = append(buf, field...)
+	buf = append(buf, ' ')
+	buf = append(buf, data...)
+	return buf, s, true
 }
 
 var hexDigits = []byte("0123456789abcdef")

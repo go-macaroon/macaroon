@@ -1,6 +1,7 @@
 package macaroon_test
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/rogpeppe/macaroon"
 	gc "gopkg.in/check.v1"
-	_ "net/http"
 )
 
 func TestPackage(t *testing.T) {
@@ -484,4 +484,50 @@ func makeMacaroons(mspecs []macaroonSpec) (
 		m.Bind(primary.Signature())
 	}
 	return []byte(mspecs[0].rootKey), primary, discharges
+}
+
+func assertEqualMacaroons(c *gc.C, m0, m1 *macaroon.Macaroon) {
+	m0json, err := m0.MarshalJSON()
+	c.Assert(err, gc.IsNil)
+	m1json, err := m1.MarshalJSON()
+	var m0val, m1val interface{}
+	err = json.Unmarshal(m0json, &m0val)
+	c.Assert(err, gc.IsNil)
+	err = json.Unmarshal(m1json, &m1val)
+	c.Assert(err, gc.IsNil)
+	c.Assert(m0val, gc.DeepEquals, m1val)
+}
+
+func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
+	// Test the binary marshalling and unmarshalling of a macaroon with
+	// first and third party caveats.
+	rootKey := []byte("secret")
+	m0 := MustNew(rootKey, "some id", "a location")
+	err := m0.AddFirstPartyCaveat("first caveat")
+	c.Assert(err, gc.IsNil)
+	err = m0.AddFirstPartyCaveat("second caveat")
+	c.Assert(err, gc.IsNil)
+	err = m0.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", "remote.com")
+	c.Assert(err, gc.IsNil)
+	data, err := m0.MarshalBinary()
+	c.Assert(err, gc.IsNil)
+	var m1 macaroon.Macaroon
+	err = m1.UnmarshalBinary(data)
+	c.Assert(err, gc.IsNil)
+	assertEqualMacaroons(c, m0, &m1)
+}
+
+func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
+	// Test that a libmacaroon marshalled macaroon can be correctly unmarshaled
+	data, err := base64.StdEncoding.DecodeString(
+		"MDAxN2xvY2F0aW9uIHNvbWV3aGVyZQowMDEyaWRlbnRpZmllciBpZAowMDEzY2lkIGlkZW50aWZpZXIKMDA1MXZpZCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4i9QwCgbL/wZGFvLQpsyhLOv0v6VjIo2KJv5miz+7krqCpt5EhmrL8pYO9xrhT80KMDAxM2NsIHRoaXJkIHBhcnR5CjAwMmZzaWduYXR1cmUg3BXkIDX0giAPPrgkDLbiMGYy/zsC2qPb4jU4G/dohkAK")
+	c.Assert(err, gc.IsNil)
+	var m0 macaroon.Macaroon
+	err = m0.UnmarshalBinary(data)
+	c.Assert(err, gc.IsNil)
+	jsonData := []byte(`{"caveats":[{"cid":"identifier\n","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAuIvUMAoGy/8GRhby0KbMoSzr9L+lYyKNiib+Zos/u5K6gqbeRIZqy/KWDvca4U/NCg==","cl":"third party\n"}],"location":"somewhere\n","identifier":"id\n","signature":"dc15e42035f482200f3eb8240cb6e2306632ff3b02daa3dbe235381bf76886400a"}`)
+	var m1 macaroon.Macaroon
+	err = m1.UnmarshalJSON(jsonData)
+	c.Assert(err, gc.IsNil)
+	assertEqualMacaroons(c, &m0, &m1)
 }

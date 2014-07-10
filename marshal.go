@@ -17,17 +17,14 @@ const (
 	fieldCaveatLocation = "cl"
 )
 
-// The binary format of a macaroon is as follows.
-// Each identifier repesents a packet.
-//
-// location
-// identifier
-// (
-//	caveatId?
-//	verificationId?
-//	caveatLocation?
-// )*
-// signature
+var (
+	fieldLocationBytes       = []byte("location")
+	fieldIdentifierBytes     = []byte("identifier")
+	fieldSignatureBytes      = []byte("signature")
+	fieldCaveatIdBytes       = []byte("cid")
+	fieldVerificationIdBytes = []byte("vid")
+	fieldCaveatLocationBytes = []byte("cl")
+)
 
 // macaroonJSON defines the JSON format for macaroons.
 type macaroonJSON struct {
@@ -91,4 +88,92 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 		}
 	}
 	return nil
+}
+
+// MarshalBinary implements encoding.BinaryMarshaler.
+func (m *Macaroon) MarshalBinary() ([]byte, error) {
+	data := make([]byte, len(m.data), len(m.data)+len(m.sig))
+	copy(data, m.data)
+	data, _, ok := rawAppendPacket(data, fieldSignature, m.sig)
+	if !ok {
+		panic("cannot append signature")
+	}
+	return data, nil
+}
+
+// The binary format of a macaroon is as follows.
+// Each identifier repesents a packet.
+//
+// location
+// identifier
+// (
+//	caveatId?
+//	verificationId?
+//	caveatLocation?
+// )*
+// signature
+
+// UnmarshalBinary implements encoding.BinaryUnmarshaler.
+func (m *Macaroon) UnmarshalBinary(data []byte) error {
+	m.data = append([]byte(nil), data...)
+
+	var err error
+	var start int
+
+	start, m.location, err = m.expectPacket(0, fieldLocation)
+	if err != nil {
+		return err
+	}
+	start, m.id, err = m.expectPacket(start, fieldIdentifier)
+	if err != nil {
+		return err
+	}
+	var cav caveat
+	for {
+		p, err := m.parsePacket(start)
+		if err != nil {
+			return err
+		}
+		start += p.len()
+		switch field := string(m.fieldName(p)); field {
+		case fieldSignature:
+			// At the end of the caveats we find the signature.
+			if cav.caveatId.len() != 0 {
+				m.caveats = append(m.caveats, cav)
+			}
+			// Remove the signature from data.
+			m.data = m.data[0:p.start]
+			m.sig = append([]byte(nil), m.dataBytes(p)...)
+			return nil
+		case fieldCaveatId:
+			if cav.caveatId.len() != 0 {
+				m.caveats = append(m.caveats, cav)
+			}
+			cav.caveatId = p
+		case fieldVerificationId:
+			if cav.verificationId.len() != 0 {
+				return fmt.Errorf("repeated field %q in caveat", fieldVerificationId)
+			}
+			cav.verificationId = p
+		case fieldCaveatLocation:
+			if cav.location.len() != 0 {
+				return fmt.Errorf("repeated field %q in caveat", fieldLocation)
+			}
+			cav.location = p
+		default:
+			return fmt.Errorf("unexpected field %q", field)
+		}
+	}
+	return nil
+}
+
+func (m *Macaroon) expectPacket(start int, kind string) (int, packet, error) {
+	p, err := m.parsePacket(start)
+	if err != nil {
+		return 0, packet{}, err
+	}
+	if field := string(m.fieldName(p)); field != kind {
+		return 0, packet{}, fmt.Errorf("unexpected field %q; expected %s", field, kind)
+	}
+	return start + p.len(), p, nil
 }
