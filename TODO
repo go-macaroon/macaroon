@@ -3,9 +3,5 @@ all:
 
 macaroon:
 
-	- Implement encoding.BinaryMarshaler
-	and encoding.BinaryUnmarshaler on Macaroon.
-	These should be compatible with libmacaroons.
-
 	- change all signature calculations to correspond exactly
 	with libmacaroons.
