@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/rogpeppe/macaroon"
 	gc "gopkg.in/check.v1"
+
+	"github.com/rogpeppe/macaroon"
 )
 
 func TestPackage(t *testing.T) {

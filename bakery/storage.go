@@ -69,10 +69,12 @@ func (s memStorage) Del(location string) error {
 // storageItem is the format used to store items in
 // the store.
 type storageItem struct {
-	Capability string
-	RootKey    []byte
+	RootKey []byte
 }
 
+// storage is a thin wrapper around Storage that
+// converts to and from StorageItems in its
+// Put and Get methods.
 type storage struct {
 	store Storage
 }

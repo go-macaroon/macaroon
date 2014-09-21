@@ -2,14 +2,16 @@ package httpbakery
 
 import (
 	"bytes"
-	"code.google.com/p/go.crypto/nacl/box"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+
+	"code.google.com/p/go.crypto/nacl/box"
 
 	"github.com/rogpeppe/macaroon/bakery"
 )
@@ -30,6 +32,8 @@ type caveatIdEncoder struct {
 
 	// TODO(rog) use a more efficient data structure
 	publicKeys []publicKeyRecord
+
+	httpClient *http.Client
 }
 
 type publicKeyRecord struct {
@@ -39,12 +43,11 @@ type publicKeyRecord struct {
 }
 
 // KeyPair holds a public/private pair of keys.
+// TODO(rog) marshal/unmarshal functions for KeyPair
 type KeyPair struct {
 	public  [32]byte
 	private [32]byte
 }
-
-// TODO(rog) marshal/unmarshal functions for KeyPair
 
 // GenerateKey generates a new key pair.
 func GenerateKey() (*KeyPair, error) {
@@ -60,9 +63,10 @@ func GenerateKey() (*KeyPair, error) {
 
 // newCaveatIdEncoder returns a new caveatIdEncoder using key, which should
 // have been created using GenerateKey.
-func newCaveatIdEncoder(key *KeyPair) *caveatIdEncoder {
+func newCaveatIdEncoder(c *http.Client, key *KeyPair) *caveatIdEncoder {
 	return &caveatIdEncoder{
-		key: *key,
+		key:        *key,
+		httpClient: c,
 	}
 }
 
@@ -132,7 +136,7 @@ func (enc *caveatIdEncoder) newStoredCaveatId(cav bakery.Caveat, rootKey []byte)
 	u := appendURLElem(cav.Location, "create")
 
 	var resp caveatIdResponse
-	if err := postFormJSON(u, url.Values{
+	if err := postFormJSON(enc.httpClient, u, url.Values{
 		"condition": {cav.Condition},
 		"root-key":  {base64.StdEncoding.EncodeToString(rootKey)},
 	}, &resp); err != nil {

@@ -24,6 +24,29 @@ type Service struct {
 	key             KeyPair
 }
 
+// DefaultHTTPClient is an http.Client that ensures that
+// headers are sent to the server even when the server redirects.
+var DefaultHTTPClient = defaultHTTPClient()
+
+func defaultHTTPClient() *http.Client {
+	c := *http.DefaultClient
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		if len(via) == 0 {
+			return nil
+		}
+		for attr, val := range via[0].Header {
+			if _, ok := req.Header[attr]; !ok {
+				req.Header[attr] = val
+			}
+		}
+		return nil
+	}
+	return &c
+}
+
 // NewServiceParams holds parameters for the NewService call.
 type NewServiceParams struct {
 	// Location holds the location of the service.
@@ -37,6 +60,11 @@ type NewServiceParams struct {
 	// the service to use. If it is nil, a new key pair
 	// will be generated.
 	Key *KeyPair
+
+	// HTTPClient holds the http client to use when
+	// creating new third party caveats for third
+	// parties. If it is nil, DefaultHTTPClient will be used.
+	HTTPClient *http.Client
 }
 
 // NewService returns a new Service.
@@ -48,7 +76,10 @@ func NewService(p NewServiceParams) (*Service, error) {
 		}
 		p.Key = key
 	}
-	enc := newCaveatIdEncoder(p.Key)
+	if p.HTTPClient == nil {
+		p.HTTPClient = DefaultHTTPClient
+	}
+	enc := newCaveatIdEncoder(p.HTTPClient, p.Key)
 	return &Service{
 		Service: bakery.NewService(bakery.NewServiceParams{
 			Location:        p.Location,
