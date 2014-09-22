@@ -1,9 +1,9 @@
 package macaroon
 
 import (
-	gc "gopkg.in/check.v1"
-
 	"strings"
+
+	gc "gopkg.in/check.v1"
 )
 
 type packetSuite struct{}

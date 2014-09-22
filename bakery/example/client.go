@@ -21,11 +21,12 @@ func clientRequest(serverEndpoint string) (string, error) {
 	// of actually gathering discharge macaroons
 	// when required, and retrying the request
 	// when necessary.
-	resp, err := httpbakery.Do(http.DefaultClient, req)
+	resp, err := httpbakery.Do(httpbakery.DefaultHTTPClient, req)
 	if err != nil {
 		return "", fmt.Errorf("GET failed: %v", err)
 	}
 	defer resp.Body.Close()
+	// TODO(rog) unmarshal error
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("cannot read response: %v", err)

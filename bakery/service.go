@@ -2,7 +2,6 @@
 // a transport and storage-agnostic way of using macaroons to assert
 // client capabilities.
 //
-//
 package bakery
 
 import (
@@ -106,20 +105,15 @@ type Request struct {
 	// to the storage associated with that macaroon
 	// for all elements in macaroons.
 	inStorage map[*macaroon.Macaroon]*storageItem
-
-	// capability maps from a capability id to the macaroons
-	// in the request that may discharge that capability.
-	capability map[string][]*macaroon.Macaroon
 }
 
 // NewRequest returns a new client request object that uses checker to
 // verify caveats.
 func (svc *Service) NewRequest(checker FirstPartyChecker) *Request {
 	return &Request{
-		svc:        svc,
-		checker:    checker,
-		inStorage:  make(map[*macaroon.Macaroon]*storageItem),
-		capability: make(map[string][]*macaroon.Macaroon),
+		svc:       svc,
+		checker:   checker,
+		inStorage: make(map[*macaroon.Macaroon]*storageItem),
 	}
 }
 
@@ -148,11 +142,10 @@ func (req *Request) AddClientMacaroon(m *macaroon.Macaroon) {
 		return
 	}
 	req.inStorage[m] = item
-	req.capability[item.Capability] = append(req.capability[item.Capability], m)
 }
 
 // NewMacaroon implements NewMacarooner.NewMacaroon.
-func (svc *Service) NewMacaroon(id string, rootKey []byte, capability string, caveats []Caveat) (*macaroon.Macaroon, error) {
+func (svc *Service) NewMacaroon(id string, rootKey []byte, caveats []Caveat) (*macaroon.Macaroon, error) {
 	if rootKey == nil {
 		newRootKey, err := randomBytes(24)
 		if err != nil {
@@ -176,8 +169,7 @@ func (svc *Service) NewMacaroon(id string, rootKey []byte, capability string, ca
 	// that with the storage item so that the storage can
 	// garbage collect it at an appropriate time.
 	if err := svc.store.Put(m.Id(), &storageItem{
-		Capability: capability,
-		RootKey:    rootKey,
+		RootKey: rootKey,
 	}); err != nil {
 		return nil, fmt.Errorf("cannot save macaroon to store: %v", err)
 	}
@@ -225,38 +217,24 @@ func randomBytes(n int) ([]byte, error) {
 	return b, nil
 }
 
-// Check checks that the client has the given capability.
-// If the verification fails in a way which might be remediable,
-// it returns a VerificationError that describes the error.
-//
-// A capability represents a client capability. A client
-// can gain a capability by presenting a valid, fully
-// discharged macaroon that is associated with
-// the capability.
-func (req *Request) Check(capability string) error {
-	// TODO(rog) provide a more flexible capability
-	// system - perhaps delegate to an interface,
-	// say:
-	//
-	// type Capability interface {
-	//	IsCapable(requireCap, hasCap string) bool
-	// }
-	//
-	// Then attempt to verify any macaroons which
-	// for which IsCapable(m.capability, capability) is true.
+// Check checks that the macaroons presented by the client verify
+// correctly. If the verification fails in a way which might be
+// remediable (for example by the addition of additional dicharge
+// macaroons), it returns a VerificationError that describes the error.
+func (req *Request) Check() error {
 	req.mu.Lock()
 	defer req.mu.Unlock()
-	possibleMacaroons := req.capability[capability]
-	if len(possibleMacaroons) == 0 {
-		// no macaroons discharging the capability.
+	if len(req.macaroons) == 0 {
 		return &VerificationError{
-			RequiredCapability: capability,
-			Reason:             fmt.Errorf("no possible macaroons found"),
+			Reason: fmt.Errorf("no possible macaroons found"),
 		}
 	}
 	var anError error
-	for _, m := range possibleMacaroons {
+	for _, m := range req.macaroons {
 		item := req.inStorage[m]
+		if item == nil {
+			continue
+		}
 		err := m.Verify(item.RootKey, req.checker.CheckFirstPartyCaveat, req.macaroons)
 		if err == nil {
 			return nil
@@ -264,8 +242,7 @@ func (req *Request) Check(capability string) error {
 		anError = err
 	}
 	return &VerificationError{
-		RequiredCapability: capability,
-		Reason:             anError,
+		Reason: anError,
 	}
 }
 
@@ -278,8 +255,7 @@ func (e *CaveatNotRecognizedError) Error() string {
 }
 
 type VerificationError struct {
-	RequiredCapability string
-	Reason             error
+	Reason error
 }
 
 func (e *VerificationError) Error() string {

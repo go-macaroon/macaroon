@@ -41,7 +41,7 @@ func Do(c *http.Client, req *http.Request) (*http.Response, error) {
 	if resp.Macaroon == nil {
 		return nil, fmt.Errorf("no macaroon found in response")
 	}
-	macaroons, err := dischargeMacaroon(resp.Macaroon)
+	macaroons, err := dischargeMacaroon(c, resp.Macaroon)
 	if err != nil {
 		return nil, err
 	}
@@ -73,13 +73,16 @@ func addCookie(req *http.Request, m *macaroon.Macaroon) error {
 	return nil
 }
 
-func dischargeMacaroon(m *macaroon.Macaroon) ([]*macaroon.Macaroon, error) {
+// dischargeMacaroon attempts to discharge all third-party caveats
+// found in the given macaroon, returning the set of discharge
+// macaroons.
+func dischargeMacaroon(c *http.Client, m *macaroon.Macaroon) ([]*macaroon.Macaroon, error) {
 	var macaroons []*macaroon.Macaroon
 	for _, cav := range m.Caveats() {
 		if cav.Location == "" {
 			continue
 		}
-		m, err := obtainThirdPartyDischarge(m.Location(), cav)
+		m, err := obtainThirdPartyDischarge(c, m.Location(), cav)
 		if err != nil {
 			return nil, fmt.Errorf("cannot obtain discharge from %q: %v", cav.Location, err)
 		}
@@ -88,9 +91,10 @@ func dischargeMacaroon(m *macaroon.Macaroon) ([]*macaroon.Macaroon, error) {
 	return macaroons, nil
 }
 
-func obtainThirdPartyDischarge(originalLocation string, cav macaroon.Caveat) (*macaroon.Macaroon, error) {
+func obtainThirdPartyDischarge(c *http.Client, originalLocation string, cav macaroon.Caveat) (*macaroon.Macaroon, error) {
 	var resp dischargeResponse
 	if err := postFormJSON(
+		c,
 		appendURLElem(cav.Location, "discharge"),
 		url.Values{
 			"id":       {cav.Id},
@@ -103,8 +107,8 @@ func obtainThirdPartyDischarge(originalLocation string, cav macaroon.Caveat) (*m
 	return resp.Macaroon, nil
 }
 
-func postFormJSON(url string, vals url.Values, resp interface{}) error {
-	httpResp, err := http.PostForm(url, vals)
+func postFormJSON(c *http.Client, url string, vals url.Values, resp interface{}) error {
+	httpResp, err := c.PostForm(url, vals)
 	if err != nil {
 		return fmt.Errorf("cannot http POST to %q: %v", url, err)
 	}

@@ -23,9 +23,15 @@ func (*exampleSuite) TestExample(c *gc.C) {
 	})
 	c.Assert(err, gc.IsNil)
 
-	resp, err := clientRequest(serverEndpoint)
+	c.Logf("gold request")
+	resp, err := clientRequest(serverEndpoint + "/gold")
 	c.Assert(err, gc.IsNil)
-	c.Assert(resp, gc.Equals, "hello, world\n")
+	c.Assert(resp, gc.Equals, "all is golden")
+
+	c.Logf("silver request")
+	resp, err = clientRequest(serverEndpoint + "/silver")
+	c.Assert(err, gc.IsNil)
+	c.Assert(resp, gc.Equals, "every cloud has a silver lining")
 }
 
 func (*exampleSuite) BenchmarkExample(c *gc.C) {
