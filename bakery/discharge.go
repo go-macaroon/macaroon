@@ -40,7 +40,7 @@ func (d *Discharger) Discharge(id string) (*macaroon.Macaroon, error) {
 	if err != nil {
 		return nil, fmt.Errorf("discharger cannot decode caveat id: %v", err)
 	}
-	caveats, err := d.Checker.CheckThirdPartyCaveat(condition)
+	caveats, err := d.Checker.CheckThirdPartyCaveat(id, condition)
 	if err != nil {
 		return nil, err
 	}

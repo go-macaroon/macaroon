@@ -17,7 +17,7 @@ import (
 type dischargeHandler struct {
 	key     *KeyPair
 	svc     *bakery.Service
-	checker func(req *http.Request, cav string) ([]bakery.Caveat, error)
+	checker func(req *http.Request, cavId, cav string) ([]bakery.Caveat, error)
 }
 
 // AddDischargeHandler handles adds handlers to the given ServeMux
@@ -60,7 +60,7 @@ type dischargeHandler struct {
 func (svc *Service) AddDischargeHandler(
 	root string,
 	mux *http.ServeMux,
-	checker func(req *http.Request, cav string) ([]bakery.Caveat, error),
+	checker func(req *http.Request, cavId, cav string) ([]bakery.Caveat, error),
 ) {
 	d := &dischargeHandler{
 		key:     &svc.key,
@@ -89,8 +89,8 @@ func (d *dischargeHandler) serveDischarge(w http.ResponseWriter, req *http.Reque
 		d.badRequest(w, "id attribute is empty")
 		return
 	}
-	checker := func(cav string) ([]bakery.Caveat, error) {
-		return d.checker(req, cav)
+	checker := func(cavId, cav string) ([]bakery.Caveat, error) {
+		return d.checker(req, cavId, cav)
 	}
 	discharger := &bakery.Discharger{
 		Checker: bakery.ThirdPartyCheckerFunc(checker),

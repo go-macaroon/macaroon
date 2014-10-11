@@ -269,21 +269,23 @@ func (e *VerificationError) Error() string {
 // checker does not return third-party caveats.
 
 // ThirdPartyChecker holds a function that checks
-// third party caveats for validity. It the
+// third party caveats for validity. If the
 // caveat is valid, it returns a nil error and
 // optionally a slice of extra caveats that
 // will be added to the discharge macaroon.
+// The caveatId parameter holds the still-encoded
+// id of the caveat.
 //
 // If the caveat kind was not recognised, the checker
 // should return ErrCaveatNotRecognised.
 type ThirdPartyChecker interface {
-	CheckThirdPartyCaveat(caveat string) ([]Caveat, error)
+	CheckThirdPartyCaveat(caveatId, caveat string) ([]Caveat, error)
 }
 
-type ThirdPartyCheckerFunc func(caveat string) ([]Caveat, error)
+type ThirdPartyCheckerFunc func(caveatId, caveat string) ([]Caveat, error)
 
-func (c ThirdPartyCheckerFunc) CheckThirdPartyCaveat(caveat string) ([]Caveat, error) {
-	return c(caveat)
+func (c ThirdPartyCheckerFunc) CheckThirdPartyCaveat(caveatId, caveat string) ([]Caveat, error) {
+	return c(caveatId, caveat)
 }
 
 // FirstPartyChecker holds a function that checks
