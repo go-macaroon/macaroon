@@ -2,10 +2,10 @@ package macaroon
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"io"
 
 	"code.google.com/p/go.crypto/nacl/secretbox"
 )
@@ -35,17 +35,17 @@ const (
 	nonceLen = 24
 )
 
-func newNonce() (*[nonceLen]byte, error) {
+func newNonce(r io.Reader) (*[nonceLen]byte, error) {
 	var nonce [nonceLen]byte
-	_, err := rand.Read(nonce[:])
+	_, err := r.Read(nonce[:])
 	if err != nil {
 		return nil, fmt.Errorf("cannot generate random bytes: %v", err)
 	}
 	return &nonce, nil
 }
 
-func encrypt(key, text []byte) ([]byte, error) {
-	nonce, err := newNonce()
+func encrypt(key, text []byte, r io.Reader) ([]byte, error) {
+	nonce, err := newNonce(r)
 	if err != nil {
 		return nil, err
 	}

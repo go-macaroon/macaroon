@@ -7,8 +7,10 @@ package macaroon
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"io"
 )
 
 // Macaroon holds a macaroon.
@@ -168,7 +170,11 @@ func (m *Macaroon) AddFirstPartyCaveat(caveatId string) error {
 // or by holding a reference to it stored in the third party's
 // storage.
 func (m *Macaroon) AddThirdPartyCaveat(rootKey []byte, caveatId string, loc string) error {
-	verificationId, err := encrypt(m.sig, rootKey)
+	return m.addThirdPartyCaveatWithRand(rootKey, caveatId, loc, rand.Reader)
+}
+
+func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey []byte, caveatId string, loc string, r io.Reader) error {
+	verificationId, err := encrypt(m.sig, rootKey, r)
 	if err != nil {
 		return err
 	}
