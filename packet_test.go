@@ -1,7 +1,9 @@
 package macaroon
 
 import (
+	"strconv"
 	"strings"
+	"unicode"
 
 	gc "gopkg.in/check.v1"
 )
@@ -61,6 +63,8 @@ func (*packetSuite) TestFieldName(c *gc.C) {
 	p, ok := m.appendPacket("field", []byte("some data"))
 	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(m.fieldName(p)), gc.Equals, "field")
+
+	c.Assert(m.fieldName(packet{}), gc.HasLen, 0)
 }
 
 var parsePacketTests = []struct {
@@ -110,6 +114,10 @@ var parsePacketTests = []struct {
 	},
 	expectData:  strings.Repeat("x", 0xfedc-4-len("somefield ")),
 	expectField: "somefield",
+}, {
+	data:      "zzzzbadpacketsizenomacaroon",
+	start:     0,
+	expectErr: "cannot parse size",
 }}
 
 func (*packetSuite) TestParsePacket(c *gc.C) {
@@ -142,4 +150,18 @@ func truncate(d string) string {
 		return d[0:50] + "..."
 	}
 	return d
+}
+
+func (*packetSuite) TestAsciiHex(c *gc.C) {
+	for b := 0; b < 256; b++ {
+		n, err := strconv.ParseInt(string(b), 16, 8)
+		value, ok := asciiHex(byte(b))
+		if err != nil || unicode.IsUpper(rune(b)) {
+			c.Assert(ok, gc.Equals, false)
+			c.Assert(value, gc.Equals, 0)
+		} else {
+			c.Assert(ok, gc.Equals, true)
+			c.Assert(value, gc.Equals, int(n))
+		}
+	}
 }

@@ -1,6 +1,7 @@
 package macaroon_test
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -80,6 +81,16 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	dm.Bind(m.Signature())
 	err = m.Verify(rootKey, never, []*macaroon.Macaroon{dm})
 	c.Assert(err, gc.IsNil)
+}
+
+func (*macaroonSuite) TestThirdPartyCaveatBadRandom(c *gc.C) {
+	rootKey := []byte("secret")
+	m := MustNew(rootKey, "some id", "a location")
+	dischargeRootKey := []byte("shared root key")
+	thirdPartyCaveatId := "3rd party caveat"
+
+	err := macaroon.AddThirdPartyCaveatWithRand(m, dischargeRootKey, thirdPartyCaveatId, "remote.com", &macaroon.ErrorReader{})
+	c.Assert(err, gc.ErrorMatches, "cannot generate random bytes: fail")
 }
 
 type conditionTest struct {
@@ -397,6 +408,10 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 			} else {
 				c.Assert(err, gc.IsNil)
 			}
+
+			// Cloned macaroon should have same verify result.
+			cloneErr := primary.Clone().Verify(rootKey, check, discharges)
+			c.Assert(cloneErr, gc.DeepEquals, err)
 		}
 	}
 }
@@ -531,4 +546,23 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	err = m1.UnmarshalJSON(jsonData)
 	c.Assert(err, gc.IsNil)
 	assertEqualMacaroons(c, &m0, &m1)
+}
+
+func (*macaroonSuite) TestMacaroonFieldsTooBig(c *gc.C) {
+	rootKey := []byte("secret")
+	toobig := make([]byte, macaroon.MaxPacketLen)
+	_, err := rand.Reader.Read(toobig)
+	c.Assert(err, gc.IsNil)
+	_, err = macaroon.New(rootKey, string(toobig), "a location")
+	c.Assert(err, gc.ErrorMatches, "macaroon identifier too big")
+	_, err = macaroon.New(rootKey, "some id", string(toobig))
+	c.Assert(err, gc.ErrorMatches, "macaroon location too big")
+
+	m0 := MustNew(rootKey, "some id", "a location")
+	err = m0.AddThirdPartyCaveat(toobig, "3rd party caveat", "remote.com")
+	c.Assert(err, gc.ErrorMatches, "caveat verification id too big")
+	err = m0.AddThirdPartyCaveat([]byte("shared root key"), string(toobig), "remote.com")
+	c.Assert(err, gc.ErrorMatches, "caveat identifier too big")
+	err = m0.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", string(toobig))
+	c.Assert(err, gc.ErrorMatches, "caveat location too big")
 }
