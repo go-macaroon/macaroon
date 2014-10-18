@@ -24,6 +24,11 @@ type Service struct {
 	key             KeyPair
 }
 
+// Key returns the service's private/public key pair.
+func (svc *Service) Key() *KeyPair {
+	return &svc.key
+}
+
 // DefaultHTTPClient is an http.Client that ensures that
 // headers are sent to the server even when the server redirects.
 var DefaultHTTPClient = defaultHTTPClient()
@@ -98,8 +103,25 @@ func NewService(p NewServiceParams) (*Service, error) {
 // match will be chosen.
 // TODO(rog) perhaps string might be a better representation
 // of public keys?
+// TODO(rog) strict string prefix is bad when locations
+// are URLs. We should probably parse them as URLs
+// and dispatch in a more intelligent way (for example
+// by matching host name exactly and the path by
+// full path name elements only.)
 func (svc *Service) AddPublicKeyForLocation(loc string, prefix bool, publicKey *[32]byte) {
 	svc.caveatIdEncoder.addPublicKeyForLocation(loc, prefix, publicKey)
+}
+
+// Discharger returns a discharger that uses the receiving service
+// to create its macaroons and to decode third-party caveat ids.
+// The decoded caveat ids are checked using the provided
+// checker.
+func (svc *Service) Discharger(checker bakery.ThirdPartyChecker) *bakery.Discharger {
+	return &bakery.Discharger{
+		Checker: checker,
+		Decoder: newCaveatIdDecoder(svc.Store(), svc.Key()),
+		Factory: svc,
+	}
 }
 
 // NewRequest returns a new request, converting cookies from the
