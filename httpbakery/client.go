@@ -8,8 +8,17 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/juju/errgo"
+
 	"github.com/rogpeppe/macaroon"
 )
+
+// WaitResponse holds the type that should be returned
+// by an HTTP response made to a WaitURL
+// (See the ErrorInfo type).
+type WaitResponse struct {
+	Macaroon *macaroon.Macaroon
+}
 
 // Do makes an http request to the given client.
 // If the request fails with a discharge-required error,
@@ -18,7 +27,7 @@ import (
 //
 // If c.Jar field is non-nil, the macaroons will be
 // stored there and made available to subsequent requests.
-func Do(c *http.Client, req *http.Request) (*http.Response, error) {
+func Do(c *http.Client, req *http.Request, visitWebPage func(url string) error) (*http.Response, error) {
 	httpResp, err := c.Do(req)
 	if err != nil {
 		return nil, err
@@ -31,33 +40,65 @@ func Do(c *http.Client, req *http.Request) (*http.Response, error) {
 	}
 	defer httpResp.Body.Close()
 
-	var resp dischargeRequestedResponse
+	var resp Error
 	if err := json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
-		return nil, fmt.Errorf("cannot unmarshal discharge-required response: %v", err)
+		return nil, errgo.Notef(err, "cannot unmarshal discharge-required response")
 	}
-	if resp.ErrorCode != codeDischargeRequired {
-		return nil, fmt.Errorf("unexpected error code: %q", resp.ErrorCode)
+	var mac *macaroon.Macaroon
+	switch resp.Code {
+	case ErrInteractionRequired:
+		if resp.Info == nil {
+			return nil, errgo.Notef(&resp, "interaction-required response with no info")
+		}
+		if err := visitWebPage(resp.Info.VisitURL); err != nil {
+			return nil, errgo.Notef(err, "cannot start interactive session")
+		}
+		waitResp, err := c.Get(resp.Info.WaitURL)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot get %q: %v", resp.Info.WaitURL)
+		}
+		defer waitResp.Body.Close()
+		if waitResp.StatusCode != http.StatusOK {
+			var resp Error
+			if err := json.NewDecoder(waitResp.Body).Decode(&resp); err != nil {
+				return nil, errgo.Notef(err, "cannot unmarshal wait error response")
+			}
+			return nil, errgo.NoteMask(&resp, "failed to acquire macaroon after waiting", errgo.Any)
+		}
+		var resp WaitResponse
+		if err := json.NewDecoder(waitResp.Body).Decode(&resp); err != nil {
+			return nil, errgo.Notef(err, "cannot unmarshal wait response")
+		}
+		if resp.Macaroon == nil {
+			return nil, fmt.Errorf("no macaroon found in wait response")
+		}
+		mac = resp.Macaroon
+	case ErrDischargeRequired:
+		if resp.Info == nil || resp.Info.Macaroon == nil {
+			return nil, fmt.Errorf("no macaroon found in response")
+		}
+		mac = resp.Info.Macaroon
+	default:
+		return nil, errgo.NoteMask(&resp, fmt.Sprintf("%s %s failed", req.Method, req.URL), errgo.Any)
 	}
-	if resp.Macaroon == nil {
-		return nil, fmt.Errorf("no macaroon found in response")
-	}
-	macaroons, err := dischargeMacaroon(c, resp.Macaroon)
+
+	macaroons, err := dischargeMacaroon(c, mac)
 	if err != nil {
 		return nil, err
 	}
-
 	// Bind the discharge macaroons to the original macaroon.
 	for _, m := range macaroons {
-		m.Bind(resp.Macaroon.Signature())
+		m.Bind(mac.Signature())
 	}
-	macaroons = append(macaroons, resp.Macaroon)
+	macaroons = append(macaroons, mac)
 	for _, m := range macaroons {
 		if err := addCookie(req, m); err != nil {
 			return nil, fmt.Errorf("cannot add cookie: %v", err)
 		}
 	}
 	// Try again with our newly acquired discharge macaroons
-	return c.Do(req)
+	hresp, err := c.Do(req)
+	return hresp, err
 }
 
 func addCookie(req *http.Request, m *macaroon.Macaroon) error {
@@ -84,7 +125,8 @@ func dischargeMacaroon(c *http.Client, m *macaroon.Macaroon) ([]*macaroon.Macaro
 		}
 		m, err := obtainThirdPartyDischarge(c, m.Location(), cav)
 		if err != nil {
-			return nil, fmt.Errorf("cannot obtain discharge from %q: %v", cav.Location, err)
+			// TODO errgo.NoteMask... "cannot obtain discharge from %q
+			return nil, err
 		}
 		macaroons = append(macaroons, m)
 	}
@@ -118,7 +160,12 @@ func postFormJSON(c *http.Client, url string, vals url.Values, resp interface{})
 		return fmt.Errorf("failed to read body from %q: %v", url, err)
 	}
 	if httpResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("POST %q failed with status %q (body %q)", url, httpResp.Status, data)
+		var errResp Error
+		if err := json.Unmarshal(data, &errResp); err != nil {
+			// TODO better error here
+			return fmt.Errorf("POST %q failed with status %q; cannot parse body %q: %v", url, httpResp.Status, data, err)
+		}
+		return &errResp
 	}
 	if err := json.Unmarshal(data, resp); err != nil {
 		return fmt.Errorf("cannot unmarshal response from %q: %v", url, err)

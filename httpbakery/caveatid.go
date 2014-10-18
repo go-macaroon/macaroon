@@ -52,13 +52,18 @@ type KeyPair struct {
 // GenerateKey generates a new key pair.
 func GenerateKey() (*KeyPair, error) {
 	var key KeyPair
-	priv, pub, err := box.GenerateKey(rand.Reader)
+	pub, priv, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 	key.public = *pub
 	key.private = *priv
 	return &key, nil
+}
+
+// PublicKey returns the public part of the key pair.
+func (key *KeyPair) PublicKey() *[32]byte {
+	return &key.public
 }
 
 // newCaveatIdEncoder returns a new caveatIdEncoder using key, which should
@@ -231,7 +236,7 @@ func (d *caveatIdDecoder) DecodeCaveatId(id string) (rootKey []byte, condition s
 	}
 	var tpid thirdPartyCaveatId
 	if err := json.Unmarshal(data, &tpid); err != nil {
-		return nil, "", fmt.Errorf("cannot unmarshal caveat id: %v", err)
+		return nil, "", fmt.Errorf("cannot unmarshal caveat id %q: %v", data, err)
 	}
 	var recordData []byte
 
@@ -275,7 +280,7 @@ func (d *caveatIdDecoder) encryptedCaveatId(id thirdPartyCaveatId) ([]byte, erro
 	}
 	out, ok := box.Open(nil, sealed, &nonce, &firstPartyPublicKey, &d.key.private)
 	if !ok {
-		return nil, fmt.Errorf("decryption of public-key encrypted caveat id failed")
+		return nil, fmt.Errorf("decryption of public-key encrypted caveat id %#v failed", id)
 	}
 	return out, nil
 }

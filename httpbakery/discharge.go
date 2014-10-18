@@ -8,39 +8,44 @@ import (
 	"net/http"
 	"path"
 
+	"github.com/juju/errgo"
+
 	"github.com/rogpeppe/macaroon"
 	"github.com/rogpeppe/macaroon/bakery"
 )
 
-// TODO(rog) perhaps rename this file to "thirdparty.go" ?
-
 type dischargeHandler struct {
-	key     *KeyPair
-	svc     *bakery.Service
+	svc     *Service
 	checker func(req *http.Request, cavId, cav string) ([]bakery.Caveat, error)
 }
 
 // AddDischargeHandler handles adds handlers to the given ServeMux
-// to service third party caveats.
+// under the given root path to service third party caveats.
+// If rootPath is empty, "/" will be used.
 //
 // The check function is used to check whether a client making the given
 // request should be allowed a discharge for the given caveat. If it
 // does not return an error, the caveat will be discharged, with any
 // returned caveats also added to the discharge macaroon.
+// If it returns an error with a *Error cause, the error will be marshaled
+// and sent back to the client.
 //
 // The name space served by DischargeHandler is as follows.
 // All parameters can be provided either as URL attributes
 // or form attributes. The result is always formatted as a JSON
 // object.
 //
+// On failure, all endpoints return an error described by
+// the Error type.
+//
 // POST /discharge
 //	params:
 //		id: id of macaroon to discharge
 //		location: location of original macaroon (optional (?))
-//	result:
+//		?? flow=redirect|newwindow
+//	result on success (http.StatusOK):
 //		{
-//			Macaroon: macaroon in json format
-//			Error: string
+//			Macaroon *macaroon.Macaroon
 //		}
 //
 // POST /create
@@ -50,7 +55,6 @@ type dischargeHandler struct {
 //	result:
 //		{
 //			CaveatID: string
-//			Error: string
 //		}
 //
 // GET /publickey
@@ -58,59 +62,54 @@ type dischargeHandler struct {
 //		public key of service
 //		expiry time of key
 func (svc *Service) AddDischargeHandler(
-	root string,
+	rootPath string,
 	mux *http.ServeMux,
 	checker func(req *http.Request, cavId, cav string) ([]bakery.Caveat, error),
 ) {
 	d := &dischargeHandler{
-		key:     &svc.key,
-		svc:     svc.Service,
+		svc:     svc,
 		checker: checker,
 	}
-	mux.HandleFunc(path.Join(root, "discharge"), d.serveDischarge)
-	mux.HandleFunc(path.Join(root, "create"), d.serveCreate)
+	if rootPath == "" {
+		rootPath = "/"
+	}
+	mux.Handle(path.Join(rootPath, "discharge"), handleJSON(d.serveDischarge))
+	mux.Handle(path.Join(rootPath, "create"), handleJSON(d.serveCreate))
 	// TODO(rog) is there a case for making public key caveat signing
 	// optional?
-	mux.HandleFunc(path.Join(root, "publickey"), d.servePublicKey)
+	mux.Handle(path.Join(rootPath, "publickey"), handleJSON(d.servePublicKey))
 }
 
 type dischargeResponse struct {
-	Macaroon *macaroon.Macaroon
+	Macaroon *macaroon.Macaroon `json:",omitempty"`
 }
 
-func (d *dischargeHandler) serveDischarge(w http.ResponseWriter, req *http.Request) {
+func (d *dischargeHandler) serveDischarge(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 	if req.Method != "POST" {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		// TODO http.StatusMethodNotAllowed)
+		return nil, badRequestErrorf("method not allowed")
 	}
 	req.ParseForm()
 	id := req.Form.Get("id")
 	if id == "" {
-		d.badRequest(w, "id attribute is empty")
-		return
+		return nil, badRequestErrorf("id attribute is empty")
 	}
 	checker := func(cavId, cav string) ([]bakery.Caveat, error) {
 		return d.checker(req, cavId, cav)
 	}
-	discharger := &bakery.Discharger{
-		Checker: bakery.ThirdPartyCheckerFunc(checker),
-		Decoder: newCaveatIdDecoder(d.svc.Store(), d.key),
-		Factory: d.svc,
-	}
+	discharger := d.svc.Discharger(bakery.ThirdPartyCheckerFunc(checker))
 
 	// TODO(rog) pass location into discharge
 	// location := req.Form.Get("location")
 
+	var resp dischargeResponse
 	m, err := discharger.Discharge(id)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("cannot discharge: %v", err), http.StatusForbidden)
-		return
+		return nil, errgo.NoteMask(err, "cannot discharge", errgo.Any)
+	} else {
+		resp.Macaroon = m
 	}
-	respBytes, err := json.Marshal(dischargeResponse{m})
-	if err != nil {
-		d.internalError(w, "cannot marshal response: %v", err)
-	}
-	w.Write(respBytes)
+	return &resp, nil
 }
 
 func (d *dischargeHandler) internalError(w http.ResponseWriter, f string, a ...interface{}) {
@@ -126,29 +125,25 @@ type thirdPartyCaveatIdRecord struct {
 	Condition string
 }
 
-func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request) {
+func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 	req.ParseForm()
 	condition := req.Form.Get("condition")
 	rootKeyStr := req.Form.Get("root-key")
 
 	if len(condition) == 0 {
-		d.badRequest(w, "empty value for condition")
-		return
+		return nil, badRequestErrorf("empty value for condition")
 	}
 	if len(rootKeyStr) == 0 {
-		d.badRequest(w, "empty value for root key")
-		return
+		return nil, badRequestErrorf("empty value for root key")
 	}
 	rootKey, err := base64.StdEncoding.DecodeString(rootKeyStr)
 	if err != nil {
-		d.badRequest(w, "cannot base64-decode root key: %v", err)
-		return
+		return nil, badRequestErrorf("cannot base64-decode root key: %v", err)
 	}
 	// TODO(rog) what about expiry times?
 	idBytes, err := randomBytes(24)
 	if err != nil {
-		d.internalError(w, "cannot generate random key: %v", err)
-		return
+		return nil, fmt.Errorf("cannot generate random key: %v", err)
 	}
 	id := fmt.Sprintf("%x", idBytes)
 	recordBytes, err := json.Marshal(thirdPartyCaveatIdRecord{
@@ -156,28 +151,19 @@ func (d *dischargeHandler) serveCreate(w http.ResponseWriter, req *http.Request)
 		RootKey:   rootKey,
 	})
 	if err != nil {
-		d.internalError(w, "cannot marshal caveat id record: %v", err)
-		return
+		return nil, fmt.Errorf("cannot marshal caveat id record: %v", err)
 	}
 	err = d.svc.Store().Put(id, string(recordBytes))
 	if err != nil {
-		d.internalError(w, "cannot store caveat id record: %v", err)
-		return
+		return nil, fmt.Errorf("cannot store caveat id record: %v", err)
 	}
-	respBytes, err := json.Marshal(caveatIdResponse{
+	return caveatIdResponse{
 		CaveatId: id,
-	})
-	if err != nil {
-		d.internalError(w, "cannot marshal caveat response: %v", err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(respBytes)
+	}, nil
 }
 
-func (d *dischargeHandler) servePublicKey(w http.ResponseWriter, r *http.Request) {
-	// TODO(rog) implement this
-	http.Error(w, "not implemented yet", http.StatusNotImplemented)
+func (d *dischargeHandler) servePublicKey(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	return nil, fmt.Errorf("not implemented yet")
 }
 
 func randomBytes(n int) ([]byte, error) {
