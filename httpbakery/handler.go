@@ -1,8 +1,8 @@
 package httpbakery
 
 import (
-	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/rogpeppe/macaroon"
@@ -18,37 +18,18 @@ type dischargeRequestedResponse struct {
 // given error and sends the given macaroon to the client, indicating
 // that it should be discharged to allow the original request to be
 // accepted.
-//
-// If it returns an error, it will have written the http response
-// anyway.
-//
-// The cookie value is a base-64-encoded JSON serialization of the
-// macaroon.
-//
-// TODO(rog) consider an alternative approach - perhaps
-// it would be better to include the macaroon directly in the
-// response and leave it up to the client to add it to the cookies
-// along with the discharge macaroons.
-func WriteDischargeRequiredError(w http.ResponseWriter, m *macaroon.Macaroon, originalErr error) error {
+func WriteDischargeRequiredError(w http.ResponseWriter, m *macaroon.Macaroon, originalErr error) {
+	log.Printf("write discharge required error")
 	if originalErr == nil {
 		originalErr = fmt.Errorf("unauthorized")
 	}
-	respData, err := json.Marshal(&Error{
+	writeError(w, &Error{
 		Message: originalErr.Error(),
 		Code:    ErrDischargeRequired,
 		Info: &ErrorInfo{
 			Macaroon: m,
 		},
 	})
-	if err != nil {
-		err = fmt.Errorf("internal error: cannot marshal response: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusProxyAuthRequired)
-	w.Write(respData)
-	return nil
 }
 
 // It remains to be seen whether the following code is useful

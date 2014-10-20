@@ -8,7 +8,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
+
+	"code.google.com/p/go.net/publicsuffix"
 
 	"github.com/rogpeppe/macaroon"
 	"github.com/rogpeppe/macaroon/bakery"
@@ -49,7 +53,26 @@ func defaultHTTPClient() *http.Client {
 		}
 		return nil
 	}
+	jar, err := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	if err != nil {
+		panic(err)
+	}
+	c.Jar = &cookieLogger{jar}
 	return &c
+}
+
+type cookieLogger struct {
+	http.CookieJar
+}
+
+func (j *cookieLogger) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	log.Printf("%p setting %d cookies for %s", j.CookieJar, len(cookies), u)	
+	for i, c := range cookies {
+		log.Printf("\t%d. path %s; name %s", i, c.Path, c.Name)
+	}
+	j.CookieJar.SetCookies(u, cookies)
 }
 
 // NewServiceParams holds parameters for the NewService call.
@@ -81,6 +104,7 @@ func NewService(p NewServiceParams) (*Service, error) {
 		}
 		p.Key = key
 	}
+	log.Printf("new service at %s with public key %x", p.Location, p.Key.public[:])
 	if p.HTTPClient == nil {
 		p.HTTPClient = DefaultHTTPClient
 	}

@@ -63,6 +63,11 @@ func (svc *Service) Store() Storage {
 	return svc.store.store
 }
 
+// Location returns the service's configured macaroon location.
+func (svc *Service) Location() string {
+	return svc.location
+}
+
 // CaveatIdDecoder decodes caveat ids created by a CaveatIdEncoder.
 type CaveatIdDecoder interface {
 	DecodeCaveatId(id string) (rootKey []byte, condition string, err error)
@@ -78,6 +83,8 @@ type CaveatIdEncoder interface {
 // Caveat represents a condition that must be true for a check to
 // complete successfully. If Location is non-empty, the caveat must be
 // discharged by a third party at the given location.
+// This differs from macaroon.Caveat in that the condition
+// is not encrypted.
 type Caveat struct {
 	Location  string
 	Condition string
