@@ -30,6 +30,7 @@ const (
 var (
 	handleJSON   = jsonhttp.HandleJSON(errorToResponse)
 	handleErrors = jsonhttp.HandleErrors(errorToResponse)
+	writeError   = jsonhttp.WriteError(errorToResponse)
 )
 
 // Error holds the type of a response from an httpbakery HTTP request,
@@ -85,7 +86,7 @@ func errorToResponse(err error) (int, interface{}) {
 	case ErrBadRequest:
 		status = http.StatusBadRequest
 	case ErrDischargeRequired, ErrInteractionRequired:
-		status = http.StatusUnauthorized
+		status = http.StatusProxyAuthRequired
 	}
 	return status, errorBody
 }

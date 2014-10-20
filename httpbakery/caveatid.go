@@ -140,11 +140,12 @@ func (enc *caveatIdEncoder) newStoredCaveatId(cav bakery.Caveat, rootKey []byte)
 	// Are there advantages to having an unrestricted protocol?
 	u := appendURLElem(cav.Location, "create")
 
+	// TODO(rog) should we use the logic found in clientContext.do?
 	var resp caveatIdResponse
-	if err := postFormJSON(enc.httpClient, u, url.Values{
+	if err := postFormJSON(u, url.Values{
 		"condition": {cav.Condition},
 		"root-key":  {base64.StdEncoding.EncodeToString(rootKey)},
-	}, &resp); err != nil {
+	}, &resp, enc.httpClient.PostForm); err != nil {
 		return nil, fmt.Errorf("cannot create caveat id through %q: %v", u, err)
 	}
 	if resp.Error != "" {

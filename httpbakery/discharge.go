@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"path"
 
@@ -85,6 +86,18 @@ type dischargeResponse struct {
 }
 
 func (d *dischargeHandler) serveDischarge(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+	r, err := d.serveDischarge1(w, req)
+	if err != nil {
+		log.Printf("serveDischarge -> error %#v", err)
+	} else {
+		log.Printf("serveDischarge -> %#v", r)
+	}
+	return r, err
+}
+
+func (d *dischargeHandler) serveDischarge1(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+	log.Printf("dischargeHandler.serveDischarge {")
+	defer log.Printf("}")
 	if req.Method != "POST" {
 		// TODO http.StatusMethodNotAllowed)
 		return nil, badRequestErrorf("method not allowed")
@@ -106,9 +119,8 @@ func (d *dischargeHandler) serveDischarge(w http.ResponseWriter, req *http.Reque
 	m, err := discharger.Discharge(id)
 	if err != nil {
 		return nil, errgo.NoteMask(err, "cannot discharge", errgo.Any)
-	} else {
-		resp.Macaroon = m
 	}
+	resp.Macaroon = m
 	return &resp, nil
 }
 
