@@ -10,7 +10,7 @@ import (
 
 	gc "gopkg.in/check.v1"
 
-	"github.com/rogpeppe/macaroon"
+	"gopkg.in/macaroon.v1"
 )
 
 func TestPackage(t *testing.T) {
