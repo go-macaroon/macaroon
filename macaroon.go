@@ -151,10 +151,10 @@ func (m *Macaroon) addCaveat(caveatId string, verificationId []byte, loc string)
 }
 
 // Bind prepares the macaroon for being used to discharge the
-// macaroon with the given rootSig. This must be
+// macaroon with the given signature sig. This must be
 // used before it is used in the discharges argument to Verify.
-func (m *Macaroon) Bind(rootSig []byte) {
-	m.sig = bindForRequest(rootSig, m.sig)
+func (m *Macaroon) Bind(sig []byte) {
+	m.sig = bindForRequest(sig, m.sig)
 }
 
 // AddFirstPartyCaveat adds a caveat that will be verified
