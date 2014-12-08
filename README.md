@@ -6,6 +6,9 @@ The macaroon package implements macaroons as described in the paper "Macaroons:
 Cookies with Contextual Caveats for Decentralized Authorization in the Cloud"
 (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
 
+See the macaroon bakery packages at http://godoc.org/gopkg.in/macaroon-bakery.v0
+for higher level services and operations that use macaroons.
+
 ## Usage
 
 #### type Caveat
@@ -57,11 +60,11 @@ party or by holding a reference to it stored in the third party's storage.
 #### func (*Macaroon) Bind
 
 ```go
-func (m *Macaroon) Bind(rootSig []byte)
+func (m *Macaroon) Bind(sig []byte)
 ```
 Bind prepares the macaroon for being used to discharge the macaroon with the
-given rootSig. This must be used before it is used in the discharges argument to
-Verify.
+given signature sig. This must be used before it is used in the discharges
+argument to Verify.
 
 #### func (*Macaroon) Caveats
 
