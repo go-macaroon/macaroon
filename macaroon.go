@@ -2,6 +2,9 @@
 // the paper "Macaroons: Cookies with Contextual Caveats for
 // Decentralized Authorization in the Cloud"
 // (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
+//
+// See the macaroon bakery packages at http://godoc.org/gopkg.in/macaroon-bakery.v0
+// for higher level services and operations that use macaroons.
 package macaroon
 
 import (
