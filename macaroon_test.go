@@ -202,25 +202,82 @@ var verifyTests = []struct {
 		conditions: map[string]bool{
 			"wonderful": true,
 		},
-		expectErr: `condition "top of the world" not met`,
+		expectErr: `condition "splendid" not met`,
 	}, {
 		conditions: map[string]bool{
 			"wonderful":        true,
 			"splendid":         true,
 			"top of the world": true,
 		},
+		expectErr: `discharge macaroon "bob-is-great" was not used`,
 	}, {
 		conditions: map[string]bool{
 			"wonderful":        true,
 			"splendid":         false,
 			"top of the world": true,
 		},
+		expectErr: `condition "splendid" not met`,
 	}, {
 		conditions: map[string]bool{
 			"wonderful":        true,
 			"splendid":         true,
 			"top of the world": false,
 		},
+		expectErr: `discharge macaroon "bob-is-great" was not used`,
+	}},
+}, {
+	about: "one discharge used for two macaroons",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "somewhere else",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}, {
+			condition: "bob-is-great",
+			location:  "charlie",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "somewhere else",
+		caveats: []caveat{{
+			condition: "bob-is-great",
+			location:  "charlie",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+	}},
+	conditions: []conditionTest{{
+		expectErr: `discharge macaroon "bob-is-great" was used more than once`,
+	}},
+}, {
+	about: "recursive third party caveat",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+		caveats: []caveat{{
+			condition: "bob-is-great",
+			location:  "bob",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}, {
+		location: "bob",
+		rootKey:  "bob-caveat-root-key",
+		id:       "bob-is-great",
+		caveats: []caveat{{
+			condition: "bob-is-great",
+			location:  "charlie",
+			rootKey:   "bob-caveat-root-key",
+		}},
+	}},
+	conditions: []conditionTest{{
+		expectErr: `discharge macaroon "bob-is-great" was used more than once`,
 	}},
 }, {
 	about: "two third party caveats",
@@ -323,6 +380,18 @@ var verifyTests = []struct {
 			"spiffing":    true,
 		},
 		expectErr: `condition "high-fiving" not met`,
+	}},
+}, {
+	about: "unused discharge",
+	macaroons: []macaroonSpec{{
+		rootKey: "root-key",
+		id:      "root-id",
+	}, {
+		rootKey: "other-key",
+		id:      "unused",
+	}},
+	conditions: []conditionTest{{
+		expectErr: `discharge macaroon "unused" was not used`,
 	}},
 }}
 
