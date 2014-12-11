@@ -92,13 +92,8 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 
 // MarshalBinary implements encoding.BinaryMarshaler.
 func (m *Macaroon) MarshalBinary() ([]byte, error) {
-	data := make([]byte, len(m.data), len(m.data)+len(m.sig))
-	copy(data, m.data)
-	data, _, ok := rawAppendPacket(data, fieldSignature, m.sig)
-	if !ok {
-		panic("cannot append signature")
-	}
-	return data, nil
+	data := make([]byte, 0, m.marshalBinaryLen())
+	return m.appendBinary(data)
 }
 
 // The binary format of a macaroon is as follows.
@@ -113,10 +108,11 @@ func (m *Macaroon) MarshalBinary() ([]byte, error) {
 // )*
 // signature
 
-// UnmarshalBinary implements encoding.BinaryUnmarshaler.
-func (m *Macaroon) UnmarshalBinary(data []byte) error {
-	m.data = append([]byte(nil), data...)
-
+// unmarshalBinaryNoCopy is the internal implementation of
+// UnmarshalBinary. It differs in that it does not copy the
+// data.
+func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) error {
+	m.data = data
 	var err error
 	var start int
 
@@ -164,7 +160,12 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 			return fmt.Errorf("unexpected field %q", field)
 		}
 	}
-	return nil
+}
+
+// UnmarshalBinary implements encoding.BinaryUnmarshaler.
+func (m *Macaroon) UnmarshalBinary(data []byte) error {
+	data = append([]byte(nil), data...)
+	return m.unmarshalBinaryNoCopy(data)
 }
 
 func (m *Macaroon) expectPacket(start int, kind string) (int, packet, error) {
@@ -176,4 +177,58 @@ func (m *Macaroon) expectPacket(start int, kind string) (int, packet, error) {
 		return 0, packet{}, fmt.Errorf("unexpected field %q; expected %s", field, kind)
 	}
 	return start + p.len(), p, nil
+}
+
+func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
+	data = append(data, m.data...)
+	data, _, ok := rawAppendPacket(data, fieldSignature, m.sig)
+	if !ok {
+		return nil, fmt.Errorf("failed to append signature to macaroon, packet is too long")
+	}
+	return data, nil
+}
+
+func (m *Macaroon) marshalBinaryLen() int {
+	return len(m.data) + packetSize(fieldSignature, m.sig)
+}
+
+// Slice defines a collection of macaroons. By convention, the
+// first macaroon in the slice is a primary macaroon and the rest
+// are discharges for its third party caveats.
+type Slice []*Macaroon
+
+// MarshalBinary implements encoding.BinaryMarshaler.
+func (s Slice) MarshalBinary() ([]byte, error) {
+	size := 0
+	for _, m := range s {
+		size += m.marshalBinaryLen()
+	}
+	data := make([]byte, 0, size)
+	var err error
+	for _, m := range s {
+		data, err = m.appendBinary(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal macaroon %q: %v", m.Id(), err)
+		}
+	}
+	return data, nil
+}
+
+// UnmarshalBinary implements encoding.BinaryUnmarshaler.
+func (s *Slice) UnmarshalBinary(data []byte) error {
+	data = append([]byte(nil), data...)
+	*s = (*s)[:0]
+	for len(data) > 0 {
+		var m Macaroon
+		err := m.unmarshalBinaryNoCopy(data)
+		if err != nil {
+			return fmt.Errorf("cannot unmarshal macaroon: %v", err)
+		}
+		*s = append(*s, &m)
+		// Prevent the macaroon from overwriting the other ones
+		// by setting the capacity of its data.
+		m.data = m.data[0:len(m.data):m.marshalBinaryLen()]
+		data = data[m.marshalBinaryLen():]
+	}
+	return nil
 }
