@@ -7,7 +7,7 @@ import (
 	"hash"
 	"io"
 
-	"code.google.com/p/go.crypto/nacl/secretbox"
+	"golang.org/x/crypto/nacl/secretbox"
 )
 
 func keyedHash(key, text []byte) []byte {

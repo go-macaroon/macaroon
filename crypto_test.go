@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
-	"code.google.com/p/go.crypto/nacl/secretbox"
+	"golang.org/x/crypto/nacl/secretbox"
 	gc "gopkg.in/check.v1"
 )
 
