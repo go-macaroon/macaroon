@@ -12,14 +12,15 @@ type cryptoSuite struct{}
 
 var _ = gc.Suite(&cryptoSuite{})
 
+var testCryptKey = &[hashLen]byte{'k', 'e', 'y'}
+var testCryptText = &[hashLen]byte{'t', 'e', 'x', 't'}
+
 func (*cryptoSuite) TestEncDec(c *gc.C) {
-	key := []byte("a key")
-	text := []byte("some text")
-	b, err := encrypt(key, text, rand.Reader)
+	b, err := encrypt(testCryptKey, testCryptText, rand.Reader)
 	c.Assert(err, gc.IsNil)
-	t, err := decrypt(key, b)
+	t, err := decrypt(testCryptKey, b)
 	c.Assert(err, gc.IsNil)
-	c.Assert(string(t), gc.Equals, string(text))
+	c.Assert(string(t[:]), gc.Equals, string(testCryptText[:]))
 }
 
 func (*cryptoSuite) TestUniqueNonces(c *gc.C) {
@@ -42,17 +43,17 @@ func (*cryptoSuite) TestBadRandom(c *gc.C) {
 	_, err := newNonce(&ErrorReader{})
 	c.Assert(err, gc.ErrorMatches, "^cannot generate random bytes:.*")
 
-	_, err = encrypt([]byte("a key"), []byte("some text"), &ErrorReader{})
+	_, err = encrypt(testCryptKey, testCryptText, &ErrorReader{})
 	c.Assert(err, gc.ErrorMatches, "^cannot generate random bytes:.*")
 }
 
 func (*cryptoSuite) TestBadCiphertext(c *gc.C) {
 	buf := randomBytes(nonceLen + secretbox.Overhead)
 	for i := range buf {
-		_, err := decrypt([]byte("a key"), buf[0:i])
+		_, err := decrypt(testCryptKey, buf[0:i])
 		c.Assert(err, gc.ErrorMatches, "message too short")
 	}
-	_, err := decrypt([]byte("a key"), buf)
+	_, err := decrypt(testCryptKey, buf)
 	c.Assert(err, gc.ErrorMatches, "decryption failure")
 }
 

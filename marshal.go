@@ -46,7 +46,7 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	mjson := macaroonJSON{
 		Location:   m.Location(),
 		Identifier: m.dataStr(m.id),
-		Signature:  hex.EncodeToString(m.sig),
+		Signature:  hex.EncodeToString(m.sig[:]),
 		Caveats:    make([]caveatJSON, len(m.caveats)),
 	}
 	for i, cav := range m.caveats {
@@ -73,10 +73,14 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	if err := m.init(mjson.Identifier, mjson.Location); err != nil {
 		return err
 	}
-	m.sig, err = hex.DecodeString(mjson.Signature)
+	sig, err := hex.DecodeString(mjson.Signature)
 	if err != nil {
 		return fmt.Errorf("cannot decode macaroon signature %q: %v", m.sig, err)
 	}
+	if len(sig) != hashLen {
+		return fmt.Errorf("signature has unexpected length %d", len(sig))
+	}
+	copy(m.sig[:], sig)
 	m.caveats = m.caveats[:0]
 	for _, cav := range mjson.Caveats {
 		vid, err := base64.StdEncoding.DecodeString(cav.VID)
@@ -139,7 +143,11 @@ func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) error {
 			}
 			// Remove the signature from data.
 			m.data = m.data[0:p.start]
-			m.sig = append([]byte(nil), m.dataBytes(p)...)
+			sig := m.dataBytes(p)
+			if len(sig) != hashLen {
+				return fmt.Errorf("signature has unexpected length %d", len(sig))
+			}
+			copy(m.sig[:], sig)
 			return nil
 		case fieldCaveatId:
 			if cav.caveatId.len() != 0 {
@@ -181,7 +189,7 @@ func (m *Macaroon) expectPacket(start int, kind string) (int, packet, error) {
 
 func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
 	data = append(data, m.data...)
-	data, _, ok := rawAppendPacket(data, fieldSignature, m.sig)
+	data, _, ok := rawAppendPacket(data, fieldSignature, m.sig[:])
 	if !ok {
 		return nil, fmt.Errorf("failed to append signature to macaroon, packet is too long")
 	}
@@ -189,7 +197,7 @@ func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
 }
 
 func (m *Macaroon) marshalBinaryLen() int {
-	return len(m.data) + packetSize(fieldSignature, m.sig)
+	return len(m.data) + packetSize(fieldSignature, m.sig[:])
 }
 
 // Slice defines a collection of macaroons. By convention, the

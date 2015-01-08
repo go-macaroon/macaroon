@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"fmt"
 	"io"
 )
@@ -29,7 +28,7 @@ type Macaroon struct {
 	location packet
 	id       packet
 	caveats  []caveat
-	sig      []byte
+	sig      [hashLen]byte
 }
 
 // caveat holds a first person or third party caveat.
@@ -57,7 +56,8 @@ func New(rootKey []byte, id, loc string) (*Macaroon, error) {
 	if err := m.init(id, loc); err != nil {
 		return nil, err
 	}
-	m.sig = keyedHash(rootKey, m.dataBytes(m.id))
+	derivedKey := makeKey(rootKey)
+	m.sig = *keyedHash(derivedKey, m.dataBytes(m.id))
 	return &m, nil
 }
 
@@ -81,7 +81,6 @@ func (m *Macaroon) Clone() *Macaroon {
 	// macaroon, it will copy data and caveats.
 	m1.data = m1.data[0:len(m1.data):len(m1.data)]
 	m1.caveats = m1.caveats[0:len(m1.caveats):len(m1.caveats)]
-	m1.sig = append([]byte(nil), m.sig...)
 	return &m1
 }
 
@@ -99,7 +98,12 @@ func (m *Macaroon) Id() string {
 
 // Signature returns the macaroon's signature.
 func (m *Macaroon) Signature() []byte {
-	return append([]byte(nil), m.sig...)
+	// sig := m.sig
+	// return sig[:]
+	// Work around https://github.com/golang/go/issues/9537
+	sig := new([hashLen]byte)
+	*sig = m.sig
+	return sig[:]
 }
 
 // Caveats returns the macaroon's caveats.
@@ -146,18 +150,25 @@ func (m *Macaroon) addCaveat(caveatId string, verificationId []byte, loc string)
 	if err != nil {
 		return err
 	}
-	sig := keyedHasher(m.sig)
-	sig.Write(m.dataBytes(cav.verificationId))
-	sig.Write(m.dataBytes(cav.caveatId))
-	m.sig = sig.Sum(m.sig[:0])
+	m.sig = *keyedHash2(&m.sig, m.dataBytes(cav.verificationId), m.dataBytes(cav.caveatId))
 	return nil
+}
+
+func keyedHash2(key *[keyLen]byte, d1, d2 []byte) *[hashLen]byte {
+	if len(d1) == 0 {
+		return keyedHash(key, d2)
+	}
+	var data [hashLen * 2]byte
+	copy(data[0:], keyedHash(key, d1)[:])
+	copy(data[hashLen:], keyedHash(key, d2)[:])
+	return keyedHash(key, data[:])
 }
 
 // Bind prepares the macaroon for being used to discharge the
 // macaroon with the given signature sig. This must be
 // used before it is used in the discharges argument to Verify.
 func (m *Macaroon) Bind(sig []byte) {
-	m.sig = bindForRequest(sig, m.sig)
+	m.sig = *bindForRequest(sig, &m.sig)
 }
 
 // AddFirstPartyCaveat adds a caveat that will be verified
@@ -177,23 +188,23 @@ func (m *Macaroon) AddThirdPartyCaveat(rootKey []byte, caveatId string, loc stri
 }
 
 func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey []byte, caveatId string, loc string, r io.Reader) error {
-	verificationId, err := encrypt(m.sig, rootKey, r)
+	derivedKey := makeKey(rootKey)
+	verificationId, err := encrypt(&m.sig, derivedKey, r)
 	if err != nil {
 		return err
 	}
 	return m.addCaveat(caveatId, verificationId, loc)
 }
 
-// bndForRequest binds the given macaroon
+var zeroKey [hashLen]byte
+
+// bindForRequest binds the given macaroon
 // to the given signature of its parent macaroon.
-func bindForRequest(rootSig, dischargeSig []byte) []byte {
-	if bytes.Equal(rootSig, dischargeSig) {
-		return rootSig
+func bindForRequest(rootSig []byte, dischargeSig *[hashLen]byte) *[hashLen]byte {
+	if bytes.Equal(rootSig, dischargeSig[:]) {
+		return dischargeSig
 	}
-	sig := sha256.New()
-	sig.Write(rootSig)
-	sig.Write(dischargeSig)
-	return sig.Sum(nil)
+	return keyedHash2(&zeroKey, rootSig, dischargeSig[:])
 }
 
 // Verify verifies that the receiving macaroon is valid.
@@ -206,11 +217,12 @@ func bindForRequest(rootSig, dischargeSig []byte) []byte {
 //
 // Verify returns nil if the verification succeeds.
 func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges []*Macaroon) error {
+	derivedKey := makeKey(rootKey)
 	// TODO(rog) consider distinguishing between classes of
 	// check error - some errors may be resolved by minting
 	// a new macaroon; others may not.
 	used := make([]int, len(discharges))
-	if err := m.verify(m.sig, rootKey, check, discharges, used); err != nil {
+	if err := m.verify(&m.sig, derivedKey, check, discharges, used); err != nil {
 		return err
 	}
 	for i, dm := range discharges {
@@ -227,10 +239,7 @@ func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, disch
 	return nil
 }
 
-func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat string) error, discharges []*Macaroon, used []int) error {
-	if len(rootSig) == 0 {
-		rootSig = m.sig
-	}
+func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check func(caveat string) error, discharges []*Macaroon, used []int) error {
 	caveatSig := keyedHash(rootKey, m.dataBytes(m.id))
 	for i, cav := range m.caveats {
 		if cav.isThirdParty() {
@@ -267,15 +276,12 @@ func (m *Macaroon) verify(rootSig []byte, rootKey []byte, check func(caveat stri
 				return err
 			}
 		}
-		sig := keyedHasher(caveatSig)
-		sig.Write(m.dataBytes(cav.verificationId))
-		sig.Write(m.dataBytes(cav.caveatId))
-		caveatSig = sig.Sum(caveatSig[:0])
+		caveatSig = keyedHash2(caveatSig, m.dataBytes(cav.verificationId), m.dataBytes(cav.caveatId))
 	}
 	// TODO perhaps we should actually do this check before doing
 	// all the potentially expensive caveat checks.
-	boundSig := bindForRequest(rootSig, caveatSig)
-	if !hmac.Equal(boundSig, m.sig) {
+	boundSig := bindForRequest(rootSig[:], caveatSig)
+	if !hmac.Equal(boundSig[:], m.sig[:]) {
 		return fmt.Errorf("signature mismatch after caveat verification")
 	}
 	return nil

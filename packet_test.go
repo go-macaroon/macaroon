@@ -16,19 +16,19 @@ func (*packetSuite) TestAppendPacket(c *gc.C) {
 	var m Macaroon
 	p, ok := m.appendPacket("field", []byte("some data"))
 	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.data), gc.Equals, "0013field some data")
+	c.Assert(string(m.data), gc.Equals, "0014field some data\n")
 	c.Assert(p, gc.Equals, packet{
 		start:     0,
-		totalLen:  19,
+		totalLen:  20,
 		headerLen: 10,
 	})
 
 	p, ok = m.appendPacket("otherfield", []byte("more and more data"))
 	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.data), gc.Equals, "0013field some data0021otherfield more and more data")
+	c.Assert(string(m.data), gc.Equals, "0014field some data\n0022otherfield more and more data\n")
 	c.Assert(p, gc.Equals, packet{
-		start:     19,
-		totalLen:  33,
+		start:     20,
+		totalLen:  34,
 		headerLen: 15,
 	})
 }
@@ -54,7 +54,7 @@ func (*packetSuite) TestPacketBytes(c *gc.C) {
 	m.appendPacket("first", []byte("first data"))
 	p, ok := m.appendPacket("field", []byte("some data"))
 	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.packetBytes(p)), gc.Equals, "0013field some data")
+	c.Assert(string(m.packetBytes(p)), gc.Equals, "0014field some data\n")
 }
 
 func (*packetSuite) TestFieldName(c *gc.C) {
@@ -77,42 +77,42 @@ var parsePacketTests = []struct {
 }{{
 	expectErr: "packet too short",
 }, {
-	data:  "0013field some data",
+	data:  "0014field some data\n",
 	start: 0,
 	expect: packet{
 		start:     0,
-		totalLen:  19,
+		totalLen:  20,
 		headerLen: 10,
 	},
 	expectData:  "some data",
 	expectField: "field",
 }, {
-	data:      "0013field some data",
+	data:      "0014field some data\n",
 	start:     1,
 	expectErr: "packet size too big",
 }, {
-	data:  "0013field some data0013field some data",
-	start: 0x13,
+	data:  "0014field some data\n0014field some data\n",
+	start: 0x14,
 	expect: packet{
-		start:     0x13,
-		totalLen:  19,
+		start:     0x14,
+		totalLen:  20,
 		headerLen: 10,
 	},
 	expectData:  "some data",
 	expectField: "field",
 }, {
-	data:      "0013fieldwithoutanyspaceordata",
+	data:      "0014fieldwithoutanyspaceordata\n",
 	start:     0,
 	expectErr: "cannot parse field name",
 }, {
-	data:  "fedcsomefield " + strings.Repeat("x", 0xfedc-4-len("somefield ")),
+	data:  "fedcsomefield " + strings.Repeat("x", 0xfedc-len("0000somefield \n")) + "\n",
 	start: 0,
 	expect: packet{
 		start:     0,
 		totalLen:  0xfedc,
 		headerLen: 14,
 	},
-	expectData:  strings.Repeat("x", 0xfedc-4-len("somefield ")),
+	expectData:  strings.Repeat("x", 0xfedc-len("0000somefield \n")),
 	expectField: "somefield",
 }, {
 	data:      "zzzzbadpacketsizenomacaroon",

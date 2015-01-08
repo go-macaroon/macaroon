@@ -550,18 +550,7 @@ func makeMacaroons(mspecs []macaroonSpec) (
 ) {
 	var macaroons []*macaroon.Macaroon
 	for _, mspec := range mspecs {
-		m := MustNew([]byte(mspec.rootKey), mspec.id, mspec.location)
-		for _, cav := range mspec.caveats {
-			if cav.location != "" {
-				err := m.AddThirdPartyCaveat([]byte(cav.rootKey), cav.condition, cav.location)
-				if err != nil {
-					panic(err)
-				}
-			} else {
-				m.AddFirstPartyCaveat(cav.condition)
-			}
-		}
-		macaroons = append(macaroons, m)
+		macaroons = append(macaroons, makeMacaroon(mspec))
 	}
 	primary = macaroons[0]
 	discharges = macaroons[1:]
@@ -569,6 +558,21 @@ func makeMacaroons(mspecs []macaroonSpec) (
 		m.Bind(primary.Signature())
 	}
 	return []byte(mspecs[0].rootKey), primary, discharges
+}
+
+func makeMacaroon(mspec macaroonSpec) *macaroon.Macaroon {
+	m := MustNew([]byte(mspec.rootKey), mspec.id, mspec.location)
+	for _, cav := range mspec.caveats {
+		if cav.location != "" {
+			err := m.AddThirdPartyCaveat([]byte(cav.rootKey), cav.condition, cav.location)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			m.AddFirstPartyCaveat(cav.condition)
+		}
+	}
+	return m
 }
 
 func assertEqualMacaroons(c *gc.C, m0, m1 *macaroon.Macaroon) {
@@ -610,7 +614,7 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	var m0 macaroon.Macaroon
 	err = m0.UnmarshalBinary(data)
 	c.Assert(err, gc.IsNil)
-	jsonData := []byte(`{"caveats":[{"cid":"identifier\n","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAuIvUMAoGy/8GRhby0KbMoSzr9L+lYyKNiib+Zos/u5K6gqbeRIZqy/KWDvca4U/NCg==","cl":"third party\n"}],"location":"somewhere\n","identifier":"id\n","signature":"dc15e42035f482200f3eb8240cb6e2306632ff3b02daa3dbe235381bf76886400a"}`)
+	jsonData := []byte(`{"caveats":[{"cid":"identifier","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAuIvUMAoGy/8GRhby0KbMoSzr9L+lYyKNiib+Zos/u5K6gqbeRIZqy/KWDvca4U/N","cl":"third party"}],"location":"somewhere","identifier":"id","signature":"dc15e42035f482200f3eb8240cb6e2306632ff3b02daa3dbe235381bf7688640"}`)
 	var m1 macaroon.Macaroon
 	err = m1.UnmarshalJSON(jsonData)
 	c.Assert(err, gc.IsNil)
@@ -628,8 +632,6 @@ func (*macaroonSuite) TestMacaroonFieldsTooBig(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, "macaroon location too big")
 
 	m0 := MustNew(rootKey, "some id", "a location")
-	err = m0.AddThirdPartyCaveat(toobig, "3rd party caveat", "remote.com")
-	c.Assert(err, gc.ErrorMatches, "caveat verification id too big")
 	err = m0.AddThirdPartyCaveat([]byte("shared root key"), string(toobig), "remote.com")
 	c.Assert(err, gc.ErrorMatches, "caveat identifier too big")
 	err = m0.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", string(toobig))
