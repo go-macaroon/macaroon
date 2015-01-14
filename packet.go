@@ -16,6 +16,8 @@ import (
 //
 // - the raw data
 //
+// - a newline (\n) character
+//
 // For efficiency, we store all the packets inside
 // a single byte slice inside the macaroon, Macaroon.data. This
 // is reasonable to do because we only ever append
@@ -34,7 +36,10 @@ func (p packet) len() int {
 
 // dataBytes returns the data payload of the packet.
 func (m *Macaroon) dataBytes(p packet) []byte {
-	return m.data[p.start+int32(p.headerLen) : p.start+int32(p.totalLen)]
+	if p.totalLen == 0 {
+		return nil
+	}
+	return m.data[p.start+int32(p.headerLen) : p.start+int32(p.totalLen)-1]
 }
 
 func (m *Macaroon) dataStr(p packet) string {
@@ -73,6 +78,9 @@ func (m *Macaroon) parsePacket(start int) (packet, error) {
 	if i <= 0 {
 		return packet{}, fmt.Errorf("cannot parse field name")
 	}
+	if data[len(data)-1] != '\n' {
+		return packet{}, fmt.Errorf("no terminating newline found")
+	}
 	return packet{
 		start:     int32(start),
 		totalLen:  uint16(plen),
@@ -110,11 +118,12 @@ func rawAppendPacket(buf []byte, field string, data []byte) ([]byte, packet, boo
 	buf = append(buf, field...)
 	buf = append(buf, ' ')
 	buf = append(buf, data...)
+	buf = append(buf, '\n')
 	return buf, s, true
 }
 
 func packetSize(field string, data []byte) int {
-	return 4 + len(field) + 1 + len(data)
+	return 4 + len(field) + 1 + len(data) + 1
 }
 
 var hexDigits = []byte("0123456789abcdef")
