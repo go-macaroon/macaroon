@@ -53,7 +53,7 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 		mjson.Caveats[i] = caveatJSON{
 			Location: m.dataStr(cav.location),
 			CID:      m.dataStr(cav.caveatId),
-			VID:      base64.StdEncoding.EncodeToString(m.dataBytes(cav.verificationId)),
+			VID:      base64.URLEncoding.EncodeToString(m.dataBytes(cav.verificationId)),
 		}
 	}
 	data, err := json.Marshal(mjson)
@@ -83,7 +83,7 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	copy(m.sig[:], sig)
 	m.caveats = m.caveats[:0]
 	for _, cav := range mjson.Caveats {
-		vid, err := base64.StdEncoding.DecodeString(cav.VID)
+		vid, err := base64Decode(cav.VID)
 		if err != nil {
 			return fmt.Errorf("cannot decode verification id %q: %v", cav.VID, err)
 		}
@@ -239,4 +239,21 @@ func (s *Slice) UnmarshalBinary(data []byte) error {
 		data = data[m.marshalBinaryLen():]
 	}
 	return nil
+}
+
+// base64Decode decodes base64 data that might be missing trailing
+// pad characters.
+func base64Decode(b64String string) ([]byte, error) {
+	paddedLen := (len(b64String) + 3) / 4 * 4
+	b64data := make([]byte, len(b64String), paddedLen)
+	copy(b64data, b64String)
+	for i := len(b64String); i < paddedLen; i++ {
+		b64data = append(b64data, '=')
+	}
+	data := make([]byte, base64.URLEncoding.DecodedLen(len(b64data)))
+	n, err := base64.URLEncoding.Decode(data, b64data)
+	if err != nil {
+		return nil, err
+	}
+	return data[0:n], nil
 }
