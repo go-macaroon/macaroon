@@ -152,6 +152,7 @@ func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) error {
 		case fieldCaveatId:
 			if cav.caveatId.len() != 0 {
 				m.caveats = append(m.caveats, cav)
+				cav = caveat{}
 			}
 			cav.caveatId = p
 		case fieldVerificationId:
