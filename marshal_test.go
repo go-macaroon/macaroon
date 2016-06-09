@@ -14,7 +14,13 @@ func (*marshalSuite) TestMarshalUnmarshalMacaroon(c *gc.C) {
 	rootKey := []byte("secret")
 	m := MustNew(rootKey, "some id", "a location")
 
-	err := m.AddFirstPartyCaveat("a caveat")
+	// Adding the third party caveat before the first party caveat
+	// tests a former bug where the caveat wasn't zeroed
+	// before moving to the next caveat.
+	err := m.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", "remote.com")
+	c.Assert(err, gc.IsNil)
+
+	err = m.AddFirstPartyCaveat("a caveat")
 	c.Assert(err, gc.IsNil)
 
 	b, err := m.MarshalBinary()
