@@ -504,16 +504,26 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 
 func (*macaroonSuite) TestJSONRoundTrip(c *gc.C) {
 	// jsonData produced from the second example in libmacaroons
-	// example README, but with the signature tweaked to
-	// match our current behaviour.
-	// TODO fix that behaviour so that our signatures match.
-	jsonData := `{"caveats":[{"cid":"account = 3735928559"},{"cid":"this was how we remind auth of key\/pred","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD\/w\/dedwv4Jjw7UorCREw5rXbRqIKhr","cl":"http:\/\/auth.mybank\/"}],"location":"http:\/\/mybank\/","identifier":"we used our other secret key","signature":"6e315b0b391e8c6cc6f8d88fc22933a13430fb289b2fb613cf70f746bbe7d27d"}`
+	// example README with the following libmacaroons code:
+	//
+	// secret = 'this is a different super-secret key; never use the same secret twice'
+	// public = 'we used our other secret key'
+	// location = 'http://mybank/'
+	// M = macaroons.create(location, secret, public)
+	// M = M.add_first_party_caveat('account = 3735928559')
+	// caveat_key = '4; guaranteed random by a fair toss of the dice'
+	// predicate = 'user = Alice'
+	// identifier = 'this was how we remind auth of key/pred'
+	// M = M.add_third_party_caveat('http://auth.mybank/', caveat_key, identifier)
+	// m.serialize_json()
+
+	jsonData := `{"caveats":[{"cid":"account = 3735928559"},{"cid":"this was how we remind auth of key\/pred","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","cl":"http:\/\/auth.mybank\/"}],"location":"http:\/\/mybank\/","identifier":"we used our other secret key","signature":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`
 
 	var m macaroon.Macaroon
 	err := json.Unmarshal([]byte(jsonData), &m)
 	c.Assert(err, gc.IsNil)
 	c.Assert(hex.EncodeToString(m.Signature()), gc.Equals,
-		"6e315b0b391e8c6cc6f8d88fc22933a13430fb289b2fb613cf70f746bbe7d27d")
+		"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c")
 	data, err := m.MarshalJSON()
 	c.Assert(err, gc.IsNil)
 
@@ -608,13 +618,13 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 
 func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	// Test that a libmacaroon marshalled macaroon can be correctly unmarshaled
-	data, err := base64.StdEncoding.DecodeString(
-		"MDAxN2xvY2F0aW9uIHNvbWV3aGVyZQowMDEyaWRlbnRpZmllciBpZAowMDEzY2lkIGlkZW50aWZpZXIKMDA1MXZpZCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4i9QwCgbL/wZGFvLQpsyhLOv0v6VjIo2KJv5miz+7krqCpt5EhmrL8pYO9xrhT80KMDAxM2NsIHRoaXJkIHBhcnR5CjAwMmZzaWduYXR1cmUg3BXkIDX0giAPPrgkDLbiMGYy/zsC2qPb4jU4G/dohkAK")
+	data, err := base64.RawURLEncoding.DecodeString(
+		"MDAxY2xvY2F0aW9uIGh0dHA6Ly9teWJhbmsvCjAwMmNpZGVudGlmaWVyIHdlIHVzZWQgb3VyIG90aGVyIHNlY3JldCBrZXkKMDAxZGNpZCBhY2NvdW50ID0gMzczNTkyODU1OQowMDMwY2lkIHRoaXMgd2FzIGhvdyB3ZSByZW1pbmQgYXV0aCBvZiBrZXkvcHJlZAowMDUxdmlkIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANNuxQLgWIbR8CefBV-lJVTRbRbBsUB0u7g_8P3XncL-CY8O1KKwkRMOa120aiCoawowMDFiY2wgaHR0cDovL2F1dGgubXliYW5rLwowMDJmc2lnbmF0dXJlINJ9sv0fInYOTD2ugTfi2Pwd9sB0HBiu1LlyVr940fVcCg")
 	c.Assert(err, gc.IsNil)
 	var m0 macaroon.Macaroon
 	err = m0.UnmarshalBinary(data)
 	c.Assert(err, gc.IsNil)
-	jsonData := []byte(`{"caveats":[{"cid":"identifier","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAuIvUMAoGy/8GRhby0KbMoSzr9L+lYyKNiib+Zos/u5K6gqbeRIZqy/KWDvca4U/N","cl":"third party"}],"location":"somewhere","identifier":"id","signature":"dc15e42035f482200f3eb8240cb6e2306632ff3b02daa3dbe235381bf7688640"}`)
+	jsonData := []byte(`{"caveats":[{"cid":"account = 3735928559"},{"cid":"this was how we remind auth of key\/pred","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","cl":"http:\/\/auth.mybank\/"}],"location":"http:\/\/mybank\/","identifier":"we used our other secret key","signature":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`)
 	var m1 macaroon.Macaroon
 	err = m1.UnmarshalJSON(jsonData)
 	c.Assert(err, gc.IsNil)
