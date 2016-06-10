@@ -22,10 +22,12 @@ import (
 // Macaroons are mutable objects - use Clone as appropriate
 // to avoid unwanted mutation.
 type Macaroon struct {
-	location string
-	id       []byte
-	caveats  []Caveat
-	sig      [hashLen]byte
+	location      string
+	id            []byte
+	caveats       []Caveat
+	sig           [hashLen]byte
+	marshalAs     MarshalOpts
+	unmarshaledAs MarshalOpts
 }
 
 // Caveat holds a first person or third party caveat.
@@ -57,21 +59,18 @@ func (cav *Caveat) isThirdParty() bool {
 // identifier and location.
 func New(rootKey, id []byte, loc string) (*Macaroon, error) {
 	var m Macaroon
-	if err := m.init(id, loc); err != nil {
-		return nil, err
-	}
+	m.init(append([]byte(nil), id...), loc)
 	derivedKey := makeKey(rootKey)
 	m.sig = *keyedHash(derivedKey, m.id)
 	return &m, nil
 }
 
-func (m *Macaroon) init(id []byte, loc string) error {
-	if !utf8.ValidString(loc) {
-		return fmt.Errorf("location %q is not a valid utf-8 string", loc)
-	}
+// init initializes the macaroon. It retains a reference to id.
+func (m *Macaroon) init(id []byte, loc string) {
 	m.location = loc
 	m.id = append([]byte(nil), id...)
-	return nil
+	m.marshalAs = DefaultMarshalOpts
+	m.unmarshaledAs = DefaultMarshalOpts
 }
 
 // Clone returns a copy of the receiving macaroon.
@@ -112,22 +111,16 @@ func (m *Macaroon) Caveats() []Caveat {
 }
 
 // appendCaveat appends a caveat without modifying the macaroon's signature.
-func (m *Macaroon) appendCaveat(caveatId, verificationId []byte, loc string) error {
-	if !utf8.ValidString(loc) {
-		return fmt.Errorf("caveat location is not a valid utf-8 string")
-	}
+func (m *Macaroon) appendCaveat(caveatId, verificationId []byte, loc string) {
 	m.caveats = append(m.caveats, Caveat{
 		Id:             caveatId,
 		VerificationId: verificationId,
 		Location:       loc,
 	})
-	return nil
 }
 
 func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) error {
-	if err := m.appendCaveat(caveatId, verificationId, loc); err != nil {
-		return err
-	}
+	m.appendCaveat(caveatId, verificationId, loc)
 	m.sig = *keyedHash2(&m.sig, verificationId, caveatId)
 	return nil
 }
@@ -178,7 +171,8 @@ func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey, caveatId []byte, loc str
 	if err != nil {
 		return err
 	}
-	return m.addCaveat(caveatId, verificationId, loc)
+	m.addCaveat(caveatId, verificationId, loc)
+	return nil
 }
 
 var zeroKey [hashLen]byte

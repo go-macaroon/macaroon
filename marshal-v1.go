@@ -8,37 +8,37 @@ import (
 	"unicode/utf8"
 )
 
-// macaroonJSON defines the JSON format for macaroons.
-type macaroonJSON struct {
-	Caveats    []caveatJSON `json:"caveats"`
-	Location   string       `json:"location"`
-	Identifier string       `json:"identifier"`
-	Signature  string       `json:"signature"` // hex-encoded
+// macaroonJSONV1 defines the V1 JSON format for macaroons.
+type macaroonJSONV1 struct {
+	Caveats    []caveatJSONV1 `json:"caveats"`
+	Location   string         `json:"location"`
+	Identifier string         `json:"identifier"`
+	Signature  string         `json:"signature"` // hex-encoded
 }
 
-// caveatJSON defines the JSON format for caveats within a macaroon.
-type caveatJSON struct {
+// caveatJSONV1 defines the V1 JSON format for caveats within a macaroon.
+type caveatJSONV1 struct {
 	CID      string `json:"cid"`
 	VID      string `json:"vid,omitempty"`
 	Location string `json:"cl,omitempty"`
 }
 
-// MarshalJSON implements json.Marshaler.
-func (m *Macaroon) MarshalJSON() ([]byte, error) {
+// marshalJSONV1 marshals the macaroon to the V1 JSON format.
+func (m *Macaroon) marshalJSONV1() ([]byte, error) {
 	if !utf8.Valid(m.id) {
 		return nil, fmt.Errorf("macaroon id is not valid UTF-8")
 	}
-	mjson := macaroonJSON{
+	mjson := macaroonJSONV1{
 		Location:   m.location,
 		Identifier: string(m.id),
 		Signature:  hex.EncodeToString(m.sig[:]),
-		Caveats:    make([]caveatJSON, len(m.caveats)),
+		Caveats:    make([]caveatJSONV1, len(m.caveats)),
 	}
 	for i, cav := range m.caveats {
 		if !utf8.Valid(cav.Id) {
 			return nil, fmt.Errorf("caveat id is not valid UTF-8")
 		}
-		mjson.Caveats[i] = caveatJSON{
+		mjson.Caveats[i] = caveatJSONV1{
 			Location: cav.Location,
 			CID:      string(cav.Id),
 			VID:      base64.RawURLEncoding.EncodeToString(cav.VerificationId),
@@ -51,16 +51,10 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 	return data, nil
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
-func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
-	var mjson macaroonJSON
-	err := json.Unmarshal(jsonData, &mjson)
-	if err != nil {
-		return fmt.Errorf("cannot unmarshal json data: %v", err)
-	}
-	if err := m.init([]byte(mjson.Identifier), mjson.Location); err != nil {
-		return err
-	}
+// initJSONV1 initializes m from the JSON-unmarshaled data
+// held in mjson.
+func (m *Macaroon) initJSONV1(mjson *macaroonJSONV1) error {
+	m.init([]byte(mjson.Identifier), mjson.Location)
 	sig, err := hex.DecodeString(mjson.Signature)
 	if err != nil {
 		return fmt.Errorf("cannot decode macaroon signature %q: %v", m.sig, err)
@@ -71,24 +65,17 @@ func (m *Macaroon) UnmarshalJSON(jsonData []byte) error {
 	copy(m.sig[:], sig)
 	m.caveats = m.caveats[:0]
 	for _, cav := range mjson.Caveats {
-		vid, err := base64Decode(cav.VID)
+		vid, err := base64Decode([]byte(cav.VID))
 		if err != nil {
 			return fmt.Errorf("cannot decode verification id %q: %v", cav.VID, err)
 		}
-		if err := m.appendCaveat([]byte(cav.CID), vid, cav.Location); err != nil {
-			return err
-		}
+		m.appendCaveat([]byte(cav.CID), vid, cav.Location)
 	}
 	return nil
 }
 
-// MarshalBinary implements encoding.BinaryMarshaler.
-func (m *Macaroon) MarshalBinary() ([]byte, error) {
-	return m.appendBinary(nil)
-}
-
-// The binary format of a macaroon is as follows.
-// Each identifier repesents a packet.
+// The original (v1) binary format of a macaroon is as follows.
+// Each identifier repesents a v1 packet.
 //
 // location
 // identifier
@@ -99,10 +86,10 @@ func (m *Macaroon) MarshalBinary() ([]byte, error) {
 // )*
 // signature
 
-// unmarshalBinaryNoCopy is the internal implementation of
-// UnmarshalBinary. It differs in that it does not copy the
-// data. It returns the data after the end of the macaroon.
-func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) ([]byte, error) {
+// parseBinaryV1 parses the given data in V1 format into the macaroon. The macaroon's
+// internal data structures will retain references to the data. It
+// returns the data after the end of the macaroon.
+func (m *Macaroon) parseBinaryV1(data []byte) ([]byte, error) {
 	var err error
 
 	loc, err := expectPacketV1(data, fieldNameLocation)
@@ -110,13 +97,12 @@ func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	data = data[loc.totalLen:]
-	m.location = string(loc.data)
 	id, err := expectPacketV1(data, fieldNameIdentifier)
 	if err != nil {
 		return nil, err
 	}
 	data = data[id.totalLen:]
-	m.id = id.data
+	m.init(id.data, string(loc.data))
 	var cav Caveat
 	for {
 		p, err := parsePacketV1(data)
@@ -157,13 +143,6 @@ func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) ([]byte, error) {
 	}
 }
 
-// UnmarshalBinary implements encoding.BinaryUnmarshaler.
-func (m *Macaroon) UnmarshalBinary(data []byte) error {
-	data = append([]byte(nil), data...)
-	_, err := m.unmarshalBinaryNoCopy(data)
-	return err
-}
-
 func expectPacketV1(data []byte, kind string) (packetV1, error) {
 	p, err := parsePacketV1(data)
 	if err != nil {
@@ -175,8 +154,8 @@ func expectPacketV1(data []byte, kind string) (packetV1, error) {
 	return p, nil
 }
 
-// appendBinary appends the binary encoding of m to data.
-func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
+// appendBinaryV1 appends the binary encoding of m to data.
+func (m *Macaroon) appendBinaryV1(data []byte) ([]byte, error) {
 	var ok bool
 	data, ok = appendPacketV1(data, fieldNameLocation, []byte(m.location))
 	if !ok {
@@ -208,49 +187,4 @@ func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to append signature to macaroon, packet is too long")
 	}
 	return data, nil
-}
-
-// Slice defines a collection of macaroons. By convention, the
-// first macaroon in the slice is a primary macaroon and the rest
-// are discharges for its third party caveats.
-type Slice []*Macaroon
-
-// MarshalBinary implements encoding.BinaryMarshaler.
-func (s Slice) MarshalBinary() ([]byte, error) {
-	var data []byte
-	var err error
-	for _, m := range s {
-		data, err = m.appendBinary(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal macaroon %q: %v", m.Id(), err)
-		}
-	}
-	return data, nil
-}
-
-// UnmarshalBinary implements encoding.BinaryUnmarshaler.
-func (s *Slice) UnmarshalBinary(data []byte) error {
-	// Prevent the internal data structures from holding onto the
-	// slice by copying it first.
-	data = append([]byte(nil), data...)
-	*s = (*s)[:0]
-	for len(data) > 0 {
-		var m Macaroon
-		rest, err := m.unmarshalBinaryNoCopy(data)
-		if err != nil {
-			return fmt.Errorf("cannot unmarshal macaroon: %v", err)
-		}
-		*s = append(*s, &m)
-		data = rest
-	}
-	return nil
-}
-
-// base64Decode decodes base64 data that might be missing trailing
-// pad characters.
-func base64Decode(b64String string) ([]byte, error) {
-	if data, err := base64.StdEncoding.DecodeString(b64String); err == nil {
-		return data, nil
-	}
-	return base64.RawURLEncoding.DecodeString(b64String)
 }

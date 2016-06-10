@@ -96,3 +96,22 @@ func parseVarint(data []byte) ([]byte, int, error) {
 	}
 	return nil, 0, fmt.Errorf("varint value out of range")
 }
+
+func appendPacketV2(data []byte, p packetV2) []byte {
+	data = appendVarint(data, int(p.fieldType))
+	if p.fieldType != fieldEOS {
+		data = appendVarint(data, len(p.data))
+		data = append(data, p.data...)
+	}
+	return data
+}
+
+func appendEOSV2(data []byte) []byte {
+	return append(data, 0)
+}
+
+func appendVarint(data []byte, x int) []byte {
+	var buf [binary.MaxVarintLen32]byte
+	n := binary.PutUvarint(buf[:], uint64(x))
+	return append(data, buf[:n]...)
+}
