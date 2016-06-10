@@ -170,6 +170,8 @@ func (m *Macaroon) AddThirdPartyCaveat(rootKey, caveatId []byte, loc string) err
 	return m.addThirdPartyCaveatWithRand(rootKey, caveatId, loc, rand.Reader)
 }
 
+// addThirdPartyCaveatWithRand adds a third-party caveat to the macaroon, using
+// the given source of randomness for encrypting the caveat id.
 func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey, caveatId []byte, loc string, r io.Reader) error {
 	derivedKey := makeKey(rootKey)
 	verificationId, err := encrypt(&m.sig, derivedKey, r)

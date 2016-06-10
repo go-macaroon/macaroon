@@ -105,13 +105,13 @@ func (m *Macaroon) MarshalBinary() ([]byte, error) {
 func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) ([]byte, error) {
 	var err error
 
-	loc, err := expectPacket(data, fieldNameLocation)
+	loc, err := expectPacketV1(data, fieldNameLocation)
 	if err != nil {
 		return nil, err
 	}
 	data = data[loc.totalLen:]
 	m.location = string(loc.data)
-	id, err := expectPacket(data, fieldNameIdentifier)
+	id, err := expectPacketV1(data, fieldNameIdentifier)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (m *Macaroon) unmarshalBinaryNoCopy(data []byte) ([]byte, error) {
 	m.id = id.data
 	var cav Caveat
 	for {
-		p, err := parsePacket(data)
+		p, err := parsePacketV1(data)
 		if err != nil {
 			return nil, err
 		}
@@ -164,13 +164,13 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 	return err
 }
 
-func expectPacket(data []byte, kind string) (packet, error) {
-	p, err := parsePacket(data)
+func expectPacketV1(data []byte, kind string) (packetV1, error) {
+	p, err := parsePacketV1(data)
 	if err != nil {
-		return packet{}, err
+		return packetV1{}, err
 	}
 	if field := string(p.fieldName); field != kind {
-		return packet{}, fmt.Errorf("unexpected field %q; expected %s", field, kind)
+		return packetV1{}, fmt.Errorf("unexpected field %q; expected %s", field, kind)
 	}
 	return p, nil
 }
@@ -178,32 +178,32 @@ func expectPacket(data []byte, kind string) (packet, error) {
 // appendBinary appends the binary encoding of m to data.
 func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
 	var ok bool
-	data, ok = appendPacket(data, fieldNameLocation, []byte(m.location))
+	data, ok = appendPacketV1(data, fieldNameLocation, []byte(m.location))
 	if !ok {
 		return nil, fmt.Errorf("failed to append location to macaroon, packet is too long")
 	}
-	data, ok = appendPacket(data, fieldNameIdentifier, m.id)
+	data, ok = appendPacketV1(data, fieldNameIdentifier, m.id)
 	if !ok {
 		return nil, fmt.Errorf("failed to append identifier to macaroon, packet is too long")
 	}
 	for _, cav := range m.caveats {
-		data, ok = appendPacket(data, fieldNameCaveatId, cav.Id)
+		data, ok = appendPacketV1(data, fieldNameCaveatId, cav.Id)
 		if !ok {
 			return nil, fmt.Errorf("failed to append caveat id to macaroon, packet is too long")
 		}
 		if cav.VerificationId == nil {
 			continue
 		}
-		data, ok = appendPacket(data, fieldNameVerificationId, cav.VerificationId)
+		data, ok = appendPacketV1(data, fieldNameVerificationId, cav.VerificationId)
 		if !ok {
 			return nil, fmt.Errorf("failed to append verification id to macaroon, packet is too long")
 		}
-		data, ok = appendPacket(data, fieldNameCaveatLocation, []byte(cav.Location))
+		data, ok = appendPacketV1(data, fieldNameCaveatLocation, []byte(cav.Location))
 		if !ok {
 			return nil, fmt.Errorf("failed to append verification id to macaroon, packet is too long")
 		}
 	}
-	data, ok = appendPacket(data, fieldNameSignature, m.sig[:])
+	data, ok = appendPacketV1(data, fieldNameSignature, m.sig[:])
 	if !ok {
 		return nil, fmt.Errorf("failed to append signature to macaroon, packet is too long")
 	}

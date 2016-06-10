@@ -8,35 +8,35 @@ import (
 	gc "gopkg.in/check.v1"
 )
 
-type packetSuite struct{}
+type packetV1Suite struct{}
 
-var _ = gc.Suite(&packetSuite{})
+var _ = gc.Suite(&packetV1Suite{})
 
-func (*packetSuite) TestAppendPacket(c *gc.C) {
-	data, ok := appendPacket(nil, "field", []byte("some data"))
+func (*packetV1Suite) TestAppendPacket(c *gc.C) {
+	data, ok := appendPacketV1(nil, "field", []byte("some data"))
 	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(data), gc.Equals, "0014field some data\n")
 
-	data, ok = appendPacket(data, "otherfield", []byte("more and more data"))
+	data, ok = appendPacketV1(data, "otherfield", []byte("more and more data"))
 	c.Assert(ok, gc.Equals, true)
 	c.Assert(string(data), gc.Equals, "0014field some data\n0022otherfield more and more data\n")
 }
 
-func (*packetSuite) TestAppendPacketTooBig(c *gc.C) {
-	data, ok := appendPacket(nil, "field", make([]byte, 65532))
+func (*packetV1Suite) TestAppendPacketTooBig(c *gc.C) {
+	data, ok := appendPacketV1(nil, "field", make([]byte, 65532))
 	c.Assert(ok, gc.Equals, false)
 	c.Assert(data, gc.IsNil)
 }
 
-var parsePacketTests = []struct {
+var parsePacketV1Tests = []struct {
 	data      string
-	expect    packet
+	expect    packetV1
 	expectErr string
 }{{
 	expectErr: "packet too short",
 }, {
 	data: "0014field some data\n",
-	expect: packet{
+	expect: packetV1{
 		fieldName: []byte("field"),
 		data:      []byte("some data"),
 		totalLen:  20,
@@ -49,7 +49,7 @@ var parsePacketTests = []struct {
 	expectErr: "cannot parse field name",
 }, {
 	data: "fedcsomefield " + strings.Repeat("x", 0xfedc-len("0000somefield \n")) + "\n",
-	expect: packet{
+	expect: packetV1{
 		fieldName: []byte("somefield"),
 		data:      []byte(strings.Repeat("x", 0xfedc-len("0000somefield \n"))),
 		totalLen:  0xfedc,
@@ -59,13 +59,13 @@ var parsePacketTests = []struct {
 	expectErr: "cannot parse size",
 }}
 
-func (*packetSuite) TestParsePacket(c *gc.C) {
-	for i, test := range parsePacketTests {
+func (*packetV1Suite) TestParsePacketV1(c *gc.C) {
+	for i, test := range parsePacketV1Tests {
 		c.Logf("test %d: %q", i, truncate(test.data))
-		p, err := parsePacket([]byte(test.data))
+		p, err := parsePacketV1([]byte(test.data))
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
-			c.Assert(p, gc.DeepEquals, packet{})
+			c.Assert(p, gc.DeepEquals, packetV1{})
 			continue
 		}
 		c.Assert(err, gc.IsNil)
@@ -80,7 +80,7 @@ func truncate(d string) string {
 	return d
 }
 
-func (*packetSuite) TestAsciiHex(c *gc.C) {
+func (*packetV1Suite) TestAsciiHex(c *gc.C) {
 	for b := 0; b < 256; b++ {
 		n, err := strconv.ParseInt(string(b), 16, 8)
 		value, ok := asciiHex(byte(b))
