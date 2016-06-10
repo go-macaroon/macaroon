@@ -15,7 +15,9 @@ const (
 	fieldNameCaveatLocation = "cl"
 )
 
-const maxPacketLen = 0xffff
+// maxPacketV1Len is the maximum allowed length of a packet in the v1 macaroon
+// serialization format.
+const maxPacketV1Len = 0xffff
 
 // The original macaroon binary encoding is made from a sequence
 // of "packets", each of which has a field name and some data.
@@ -31,7 +33,7 @@ const maxPacketLen = 0xffff
 // - a newline (\n) character
 //
 // The packet struct below holds a reference into Macaroon.data.
-type packet struct {
+type packetV1 struct {
 	// ftype holds the field name of the packet.
 	fieldName []byte
 
@@ -45,43 +47,43 @@ type packet struct {
 
 // parsePacket parses the packet at the start of the
 // given data.
-func parsePacket(data []byte) (packet, error) {
+func parsePacketV1(data []byte) (packetV1, error) {
 	if len(data) < 6 {
-		return packet{}, fmt.Errorf("packet too short")
+		return packetV1{}, fmt.Errorf("packet too short")
 	}
-	plen, ok := parseSize(data)
+	plen, ok := parseSizeV1(data)
 	if !ok {
-		return packet{}, fmt.Errorf("cannot parse size")
+		return packetV1{}, fmt.Errorf("cannot parse size")
 	}
 	if plen > len(data) {
-		return packet{}, fmt.Errorf("packet size too big")
+		return packetV1{}, fmt.Errorf("packet size too big")
 	}
 	data = data[4:plen]
 	i := bytes.IndexByte(data, ' ')
 	if i <= 0 {
-		return packet{}, fmt.Errorf("cannot parse field name")
+		return packetV1{}, fmt.Errorf("cannot parse field name")
 	}
 	fieldName := data[0:i]
 	if data[len(data)-1] != '\n' {
-		return packet{}, fmt.Errorf("no terminating newline found")
+		return packetV1{}, fmt.Errorf("no terminating newline found")
 	}
-	return packet{
+	return packetV1{
 		fieldName: fieldName,
 		data:      data[i+1 : len(data)-1],
 		totalLen:  plen,
 	}, nil
 }
 
-// appendPacket appends a packet with the given field name
+// appendPacketV1 appends a packet with the given field name
 // and data to the given buffer. If the field and data were
 // too long to be encoded, it returns nil, false; otherwise
 // it returns the appended buffer.
-func appendPacket(buf []byte, field string, data []byte) ([]byte, bool) {
-	plen := packetSize(field, data)
-	if plen > maxPacketLen {
+func appendPacketV1(buf []byte, field string, data []byte) ([]byte, bool) {
+	plen := packetV1Size(field, data)
+	if plen > maxPacketV1Len {
 		return nil, false
 	}
-	buf = appendSize(buf, plen)
+	buf = appendSizeV1(buf, plen)
 	buf = append(buf, field...)
 	buf = append(buf, ' ')
 	buf = append(buf, data...)
@@ -89,13 +91,13 @@ func appendPacket(buf []byte, field string, data []byte) ([]byte, bool) {
 	return buf, true
 }
 
-func packetSize(field string, data []byte) int {
+func packetV1Size(field string, data []byte) int {
 	return 4 + len(field) + 1 + len(data) + 1
 }
 
 var hexDigits = []byte("0123456789abcdef")
 
-func appendSize(data []byte, size int) []byte {
+func appendSizeV1(data []byte, size int) []byte {
 	return append(data,
 		hexDigits[size>>12],
 		hexDigits[(size>>8)&0xf],
@@ -104,7 +106,7 @@ func appendSize(data []byte, size int) []byte {
 	)
 }
 
-func parseSize(data []byte) (int, bool) {
+func parseSizeV1(data []byte) (int, bool) {
 	d0, ok0 := asciiHex(data[0])
 	d1, ok1 := asciiHex(data[1])
 	d2, ok2 := asciiHex(data[2])
