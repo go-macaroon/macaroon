@@ -5,7 +5,19 @@ import (
 	"fmt"
 )
 
-// The macaroon binary encoding is made from a sequence
+// field names, as defined in libmacaroons
+const (
+	fieldNameLocation       = "location"
+	fieldNameIdentifier     = "identifier"
+	fieldNameSignature      = "signature"
+	fieldNameCaveatId       = "cid"
+	fieldNameVerificationId = "vid"
+	fieldNameCaveatLocation = "cl"
+)
+
+const maxPacketLen = 0xffff
+
+// The original macaroon binary encoding is made from a sequence
 // of "packets", each of which has a field name and some data.
 // The encoding is:
 //
@@ -18,51 +30,22 @@ import (
 //
 // - a newline (\n) character
 //
-// For efficiency, we store all the packets inside
-// a single byte slice inside the macaroon, Macaroon.data. This
-// is reasonable to do because we only ever append
-// to macaroons.
-//
 // The packet struct below holds a reference into Macaroon.data.
 type packet struct {
-	start     int32
-	totalLen  uint16
-	headerLen uint16
+	// ftype holds the field name of the packet.
+	fieldName []byte
+
+	// data holds the packet's data.
+	data []byte
+
+	// len holds the total length in bytes
+	// of the packet, including any header.
+	totalLen int
 }
 
-func (p packet) len() int {
-	return int(p.totalLen)
-}
-
-// dataBytes returns the data payload of the packet.
-func (m *Macaroon) dataBytes(p packet) []byte {
-	if p.totalLen == 0 {
-		return nil
-	}
-	return m.data[p.start+int32(p.headerLen) : p.start+int32(p.totalLen)-1]
-}
-
-func (m *Macaroon) dataStr(p packet) string {
-	return string(m.dataBytes(p))
-}
-
-// packetBytes returns the entire packet.
-func (m *Macaroon) packetBytes(p packet) []byte {
-	return m.data[p.start : p.start+int32(p.totalLen)]
-}
-
-// fieldName returns the field name of the packet.
-func (m *Macaroon) fieldName(p packet) []byte {
-	if p.totalLen == 0 {
-		return nil
-	}
-	return m.data[p.start+4 : p.start+int32(p.headerLen)-1]
-}
-
-// parsePacket parses the packet starting at the given
-// index into m.data.
-func (m *Macaroon) parsePacket(start int) (packet, error) {
-	data := m.data[start:]
+// parsePacket parses the packet at the start of the
+// given data.
+func parsePacket(data []byte) (packet, error) {
 	if len(data) < 6 {
 		return packet{}, fmt.Errorf("packet too short")
 	}
@@ -78,48 +61,32 @@ func (m *Macaroon) parsePacket(start int) (packet, error) {
 	if i <= 0 {
 		return packet{}, fmt.Errorf("cannot parse field name")
 	}
+	fieldName := data[0:i]
 	if data[len(data)-1] != '\n' {
 		return packet{}, fmt.Errorf("no terminating newline found")
 	}
 	return packet{
-		start:     int32(start),
-		totalLen:  uint16(plen),
-		headerLen: uint16(4 + i + 1),
+		fieldName: fieldName,
+		data:      data[i+1 : len(data)-1],
+		totalLen:  plen,
 	}, nil
 }
 
-const maxPacketLen = 0xffff
-
 // appendPacket appends a packet with the given field name
-// and data to m.data, and returns the packet appended.
-//
-// It returns false (and a zero packet) if the packet was too big.
-func (m *Macaroon) appendPacket(field string, data []byte) (packet, bool) {
-	mdata, p, ok := rawAppendPacket(m.data, field, data)
-	if !ok {
-		return p, false
-	}
-	m.data = mdata
-	return p, true
-}
-
-// rawAppendPacket appends a packet to the given byte slice.
-func rawAppendPacket(buf []byte, field string, data []byte) ([]byte, packet, bool) {
+// and data to the given buffer. If the field and data were
+// too long to be encoded, it returns nil, false; otherwise
+// it returns the appended buffer.
+func appendPacket(buf []byte, field string, data []byte) ([]byte, bool) {
 	plen := packetSize(field, data)
 	if plen > maxPacketLen {
-		return nil, packet{}, false
-	}
-	s := packet{
-		start:     int32(len(buf)),
-		totalLen:  uint16(plen),
-		headerLen: uint16(4 + len(field) + 1),
+		return nil, false
 	}
 	buf = appendSize(buf, plen)
 	buf = append(buf, field...)
 	buf = append(buf, ' ')
 	buf = append(buf, data...)
 	buf = append(buf, '\n')
-	return buf, s, true
+	return buf, true
 }
 
 func packetSize(field string, data []byte) int {

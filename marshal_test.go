@@ -3,7 +3,7 @@ package macaroon_test
 import (
 	gc "gopkg.in/check.v1"
 
-	"gopkg.in/macaroon.v1"
+	"gopkg.in/macaroon.v2-unstable"
 )
 
 type marshalSuite struct{}
@@ -12,12 +12,12 @@ var _ = gc.Suite(&marshalSuite{})
 
 func (*marshalSuite) TestMarshalUnmarshalMacaroon(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, "some id", "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location")
 
 	// Adding the third party caveat before the first party caveat
 	// tests a former bug where the caveat wasn't zeroed
 	// before moving to the next caveat.
-	err := m.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", "remote.com")
+	err := m.AddThirdPartyCaveat([]byte("shared root key"), []byte("3rd party caveat"), "remote.com")
 	c.Assert(err, gc.IsNil)
 
 	err = m.AddFirstPartyCaveat("a caveat")
@@ -31,7 +31,7 @@ func (*marshalSuite) TestMarshalUnmarshalMacaroon(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	c.Assert(m.Location(), gc.Equals, unmarshaledM.Location())
-	c.Assert(m.Id(), gc.Equals, unmarshaledM.Id())
+	c.Assert(string(m.Id()), gc.Equals, string(unmarshaledM.Id()))
 	c.Assert(m.Signature(), gc.DeepEquals, unmarshaledM.Signature())
 	c.Assert(m.Caveats(), gc.DeepEquals, unmarshaledM.Caveats())
 	c.Assert(m, gc.DeepEquals, unmarshaledM)
@@ -39,8 +39,8 @@ func (*marshalSuite) TestMarshalUnmarshalMacaroon(c *gc.C) {
 
 func (*marshalSuite) TestMarshalUnmarshalSlice(c *gc.C) {
 	rootKey := []byte("secret")
-	m1 := MustNew(rootKey, "some id", "a location")
-	m2 := MustNew(rootKey, "some other id", "another location")
+	m1 := MustNew(rootKey, []byte("some id"), "a location")
+	m2 := MustNew(rootKey, []byte("some other id"), "another location")
 
 	err := m1.AddFirstPartyCaveat("a caveat")
 	c.Assert(err, gc.IsNil)
@@ -59,7 +59,7 @@ func (*marshalSuite) TestMarshalUnmarshalSlice(c *gc.C) {
 	c.Assert(unmarshaledMacs, gc.HasLen, len(macaroons))
 	for i, m := range macaroons {
 		c.Assert(m.Location(), gc.Equals, unmarshaledMacs[i].Location())
-		c.Assert(m.Id(), gc.Equals, unmarshaledMacs[i].Id())
+		c.Assert(string(m.Id()), gc.Equals, string(unmarshaledMacs[i].Id()))
 		c.Assert(m.Signature(), gc.DeepEquals, unmarshaledMacs[i].Signature())
 		c.Assert(m.Caveats(), gc.DeepEquals, unmarshaledMacs[i].Caveats())
 	}
@@ -78,8 +78,8 @@ func (*marshalSuite) TestMarshalUnmarshalSlice(c *gc.C) {
 
 func (*marshalSuite) TestSliceRoundtrip(c *gc.C) {
 	rootKey := []byte("secret")
-	m1 := MustNew(rootKey, "some id", "a location")
-	m2 := MustNew(rootKey, "some other id", "another location")
+	m1 := MustNew(rootKey, []byte("some id"), "a location")
+	m2 := MustNew(rootKey, []byte("some other id"), "another location")
 
 	err := m1.AddFirstPartyCaveat("a caveat")
 	c.Assert(err, gc.IsNil)

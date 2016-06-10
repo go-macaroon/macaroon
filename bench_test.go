@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"gopkg.in/macaroon.v1"
+	"gopkg.in/macaroon.v2-unstable"
 )
 
 func randomBytes(n int) []byte {
@@ -19,7 +19,7 @@ func randomBytes(n int) []byte {
 
 func BenchmarkNew(b *testing.B) {
 	rootKey := randomBytes(24)
-	id := base64.StdEncoding.EncodeToString(randomBytes(100))
+	id := []byte(base64.StdEncoding.EncodeToString(randomBytes(100)))
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
 	b.ResetTimer()
 	for i := b.N - 1; i >= 0; i-- {
@@ -29,7 +29,7 @@ func BenchmarkNew(b *testing.B) {
 
 func BenchmarkAddCaveat(b *testing.B) {
 	rootKey := randomBytes(24)
-	id := base64.StdEncoding.EncodeToString(randomBytes(100))
+	id := []byte(base64.StdEncoding.EncodeToString(randomBytes(100)))
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
 	b.ResetTimer()
 	for i := b.N - 1; i >= 0; i-- {
@@ -70,7 +70,7 @@ func BenchmarkVerifySmall(b *testing.B) {
 
 func BenchmarkMarshalJSON(b *testing.B) {
 	rootKey := randomBytes(24)
-	id := base64.StdEncoding.EncodeToString(randomBytes(100))
+	id := []byte(base64.StdEncoding.EncodeToString(randomBytes(100)))
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
 	m := MustNew(rootKey, id, loc)
 	b.ResetTimer()
@@ -82,7 +82,7 @@ func BenchmarkMarshalJSON(b *testing.B) {
 	}
 }
 
-func MustNew(rootKey []byte, id, loc string) *macaroon.Macaroon {
+func MustNew(rootKey, id []byte, loc string) *macaroon.Macaroon {
 	m, err := macaroon.New(rootKey, id, loc)
 	if err != nil {
 		panic(err)
@@ -92,7 +92,7 @@ func MustNew(rootKey []byte, id, loc string) *macaroon.Macaroon {
 
 func BenchmarkUnmarshalJSON(b *testing.B) {
 	rootKey := randomBytes(24)
-	id := base64.StdEncoding.EncodeToString(randomBytes(100))
+	id := []byte(base64.StdEncoding.EncodeToString(randomBytes(100)))
 	loc := base64.StdEncoding.EncodeToString(randomBytes(40))
 	m := MustNew(rootKey, id, loc)
 	data, err := m.MarshalJSON()
