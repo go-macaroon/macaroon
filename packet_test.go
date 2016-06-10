@@ -13,135 +13,63 @@ type packetSuite struct{}
 var _ = gc.Suite(&packetSuite{})
 
 func (*packetSuite) TestAppendPacket(c *gc.C) {
-	var m Macaroon
-	p, ok := m.appendPacket("field", []byte("some data"))
+	data, ok := appendPacket(nil, "field", []byte("some data"))
 	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.data), gc.Equals, "0014field some data\n")
-	c.Assert(p, gc.Equals, packet{
-		start:     0,
-		totalLen:  20,
-		headerLen: 10,
-	})
+	c.Assert(string(data), gc.Equals, "0014field some data\n")
 
-	p, ok = m.appendPacket("otherfield", []byte("more and more data"))
+	data, ok = appendPacket(data, "otherfield", []byte("more and more data"))
 	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.data), gc.Equals, "0014field some data\n0022otherfield more and more data\n")
-	c.Assert(p, gc.Equals, packet{
-		start:     20,
-		totalLen:  34,
-		headerLen: 15,
-	})
+	c.Assert(string(data), gc.Equals, "0014field some data\n0022otherfield more and more data\n")
 }
 
 func (*packetSuite) TestAppendPacketTooBig(c *gc.C) {
-	var m Macaroon
-	data := make([]byte, 65532)
-	p, ok := m.appendPacket("field", data)
+	data, ok := appendPacket(nil, "field", make([]byte, 65532))
 	c.Assert(ok, gc.Equals, false)
-	c.Assert(p, gc.Equals, packet{})
-}
-
-func (*packetSuite) TestDataBytes(c *gc.C) {
-	var m Macaroon
-	m.appendPacket("first", []byte("first data"))
-	p, ok := m.appendPacket("field", []byte("some data"))
-	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.dataBytes(p)), gc.Equals, "some data")
-}
-
-func (*packetSuite) TestPacketBytes(c *gc.C) {
-	var m Macaroon
-	m.appendPacket("first", []byte("first data"))
-	p, ok := m.appendPacket("field", []byte("some data"))
-	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.packetBytes(p)), gc.Equals, "0014field some data\n")
-}
-
-func (*packetSuite) TestFieldName(c *gc.C) {
-	var m Macaroon
-	m.appendPacket("first", []byte("first data"))
-	p, ok := m.appendPacket("field", []byte("some data"))
-	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(m.fieldName(p)), gc.Equals, "field")
-
-	c.Assert(m.fieldName(packet{}), gc.HasLen, 0)
+	c.Assert(data, gc.IsNil)
 }
 
 var parsePacketTests = []struct {
-	data        string
-	start       int
-	expect      packet
-	expectErr   string
-	expectData  string
-	expectField string
+	data      string
+	expect    packet
+	expectErr string
 }{{
 	expectErr: "packet too short",
 }, {
-	data:  "0014field some data\n",
-	start: 0,
+	data: "0014field some data\n",
 	expect: packet{
-		start:     0,
+		fieldName: []byte("field"),
+		data:      []byte("some data"),
 		totalLen:  20,
-		headerLen: 10,
 	},
-	expectData:  "some data",
-	expectField: "field",
 }, {
-	data:      "0014field some data\n",
-	start:     1,
+	data:      "0015field some data\n",
 	expectErr: "packet size too big",
 }, {
-	data:  "0014field some data\n0014field some data\n",
-	start: 0x14,
-	expect: packet{
-		start:     0x14,
-		totalLen:  20,
-		headerLen: 10,
-	},
-	expectData:  "some data",
-	expectField: "field",
-}, {
 	data:      "0014fieldwithoutanyspaceordata\n",
-	start:     0,
 	expectErr: "cannot parse field name",
 }, {
-	data:  "fedcsomefield " + strings.Repeat("x", 0xfedc-len("0000somefield \n")) + "\n",
-	start: 0,
+	data: "fedcsomefield " + strings.Repeat("x", 0xfedc-len("0000somefield \n")) + "\n",
 	expect: packet{
-		start:     0,
+		fieldName: []byte("somefield"),
+		data:      []byte(strings.Repeat("x", 0xfedc-len("0000somefield \n"))),
 		totalLen:  0xfedc,
-		headerLen: 14,
 	},
-	expectData:  strings.Repeat("x", 0xfedc-len("0000somefield \n")),
-	expectField: "somefield",
 }, {
 	data:      "zzzzbadpacketsizenomacaroon",
-	start:     0,
 	expectErr: "cannot parse size",
 }}
 
 func (*packetSuite) TestParsePacket(c *gc.C) {
 	for i, test := range parsePacketTests {
 		c.Logf("test %d: %q", i, truncate(test.data))
-		m := Macaroon{
-			data: []byte(test.data),
-		}
-		p, err := m.parsePacket(test.start)
+		p, err := parsePacket([]byte(test.data))
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
-			c.Assert(p, gc.Equals, packet{})
+			c.Assert(p, gc.DeepEquals, packet{})
 			continue
 		}
 		c.Assert(err, gc.IsNil)
-		c.Assert(p, gc.Equals, test.expect)
-		c.Assert(string(m.dataBytes(p)), gc.Equals, test.expectData)
-		c.Assert(string(m.fieldName(p)), gc.Equals, test.expectField)
-
-		// append the same packet again and check that
-		// the contents are the same.
-		p1, ok := m.appendPacket(test.expectField, []byte(test.expectData))
-		c.Assert(ok, gc.Equals, true)
-		c.Assert(string(m.packetBytes(p)), gc.Equals, string(m.packetBytes(p1)))
+		c.Assert(p, gc.DeepEquals, test.expect)
 	}
 }
 

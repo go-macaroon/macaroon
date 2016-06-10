@@ -3,7 +3,7 @@
 // Decentralized Authorization in the Cloud"
 // (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
 //
-// See the macaroon bakery packages at http://godoc.org/gopkg.in/macaroon-bakery.v0
+// See the macaroon bakery packages at http://godoc.org/gopkg.in/macaroon-bakery.v1
 // for higher level services and operations that use macaroons.
 package macaroon
 
@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"unicode/utf8"
 )
 
 // Macaroon holds a macaroon.
@@ -21,65 +22,63 @@ import (
 // Macaroons are mutable objects - use Clone as appropriate
 // to avoid unwanted mutation.
 type Macaroon struct {
-	// data holds the binary-marshalled form
-	// of the macaroon data.
-	data []byte
-
-	location packet
-	id       packet
-	caveats  []caveat
+	location string
+	id       []byte
+	caveats  []Caveat
 	sig      [hashLen]byte
 }
 
-// caveat holds a first person or third party caveat.
-type caveat struct {
-	location       packet
-	caveatId       packet
-	verificationId packet
-}
-
+// Caveat holds a first person or third party caveat.
 type Caveat struct {
-	Id       string
+	// Id holds the id of the caveat. For first
+	// party caveats this holds the condition;
+	// for third party caveats this holds the encrypted
+	// third party caveat.
+	Id []byte
+
+	// VerificationId holds the verification id. If this is
+	// non-empty, it's a third party caveat.
+	VerificationId []byte
+
+	// For third-party caveats, Location holds the
+	// ocation hint. Note that this is not signature checked
+	// as part of the caveat, so should only
+	// be used as a hint.
 	Location string
 }
 
 // isThirdParty reports whether the caveat must be satisfied
 // by some third party (if not, it's a first person caveat).
-func (cav *caveat) isThirdParty() bool {
-	return cav.verificationId.len() > 0
+func (cav *Caveat) isThirdParty() bool {
+	return len(cav.VerificationId) > 0
 }
 
 // New returns a new macaroon with the given root key,
 // identifier and location.
-func New(rootKey []byte, id, loc string) (*Macaroon, error) {
+func New(rootKey, id []byte, loc string) (*Macaroon, error) {
 	var m Macaroon
 	if err := m.init(id, loc); err != nil {
 		return nil, err
 	}
 	derivedKey := makeKey(rootKey)
-	m.sig = *keyedHash(derivedKey, m.dataBytes(m.id))
+	m.sig = *keyedHash(derivedKey, m.id)
 	return &m, nil
 }
 
-func (m *Macaroon) init(id, loc string) error {
-	var ok bool
-	m.location, ok = m.appendPacket(fieldLocation, []byte(loc))
-	if !ok {
-		return fmt.Errorf("macaroon location too big")
+func (m *Macaroon) init(id []byte, loc string) error {
+	if !utf8.ValidString(loc) {
+		return fmt.Errorf("location %q is not a valid utf-8 string", loc)
 	}
-	m.id, ok = m.appendPacket(fieldIdentifier, []byte(id))
-	if !ok {
-		return fmt.Errorf("macaroon identifier too big")
-	}
+	m.location = loc
+	m.id = append([]byte(nil), id...)
 	return nil
 }
 
 // Clone returns a copy of the receiving macaroon.
 func (m *Macaroon) Clone() *Macaroon {
 	m1 := *m
-	// Ensure that if any data is appended to the new
-	// macaroon, it will copy data and caveats.
-	m1.data = m1.data[0:len(m1.data):len(m1.data)]
+	// Ensure that if any caveats are appended to the new
+	// macaroon, it will copy the caveats.
 	m1.caveats = m1.caveats[0:len(m1.caveats):len(m1.caveats)]
 	return &m1
 }
@@ -87,13 +86,13 @@ func (m *Macaroon) Clone() *Macaroon {
 // Location returns the macaroon's location hint. This is
 // not verified as part of the macaroon.
 func (m *Macaroon) Location() string {
-	return m.dataStr(m.location)
+	return m.location
 }
 
 // Id returns the id of the macaroon. This can hold
 // arbitrary information.
-func (m *Macaroon) Id() string {
-	return m.dataStr(m.id)
+func (m *Macaroon) Id() []byte {
+	return append([]byte(nil), m.id...)
 }
 
 // Signature returns the macaroon's signature.
@@ -109,48 +108,27 @@ func (m *Macaroon) Signature() []byte {
 // Caveats returns the macaroon's caveats.
 // This method will probably change, and it's important not to change the returned caveat.
 func (m *Macaroon) Caveats() []Caveat {
-	caveats := make([]Caveat, len(m.caveats))
-	for i, cav := range m.caveats {
-		caveats[i] = Caveat{
-			Id:       m.dataStr(cav.caveatId),
-			Location: m.dataStr(cav.location),
-		}
-	}
-	return caveats
+	return m.caveats[0:len(m.caveats):len(m.caveats)]
 }
 
 // appendCaveat appends a caveat without modifying the macaroon's signature.
-func (m *Macaroon) appendCaveat(caveatId string, verificationId []byte, loc string) (*caveat, error) {
-	var cav caveat
-	var ok bool
-	if caveatId != "" {
-		cav.caveatId, ok = m.appendPacket(fieldCaveatId, []byte(caveatId))
-		if !ok {
-			return nil, fmt.Errorf("caveat identifier too big")
-		}
+func (m *Macaroon) appendCaveat(caveatId, verificationId []byte, loc string) error {
+	if !utf8.ValidString(loc) {
+		return fmt.Errorf("caveat location is not a valid utf-8 string")
 	}
-	if len(verificationId) > 0 {
-		cav.verificationId, ok = m.appendPacket(fieldVerificationId, verificationId)
-		if !ok {
-			return nil, fmt.Errorf("caveat verification id too big")
-		}
-	}
-	if loc != "" {
-		cav.location, ok = m.appendPacket(fieldCaveatLocation, []byte(loc))
-		if !ok {
-			return nil, fmt.Errorf("caveat location too big")
-		}
-	}
-	m.caveats = append(m.caveats, cav)
-	return &m.caveats[len(m.caveats)-1], nil
+	m.caveats = append(m.caveats, Caveat{
+		Id:             caveatId,
+		VerificationId: verificationId,
+		Location:       loc,
+	})
+	return nil
 }
 
-func (m *Macaroon) addCaveat(caveatId string, verificationId []byte, loc string) error {
-	cav, err := m.appendCaveat(caveatId, verificationId, loc)
-	if err != nil {
+func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) error {
+	if err := m.appendCaveat(caveatId, verificationId, loc); err != nil {
 		return err
 	}
-	m.sig = *keyedHash2(&m.sig, m.dataBytes(cav.verificationId), m.dataBytes(cav.caveatId))
+	m.sig = *keyedHash2(&m.sig, verificationId, caveatId)
 	return nil
 }
 
@@ -172,9 +150,14 @@ func (m *Macaroon) Bind(sig []byte) {
 }
 
 // AddFirstPartyCaveat adds a caveat that will be verified
-// by the target service.
-func (m *Macaroon) AddFirstPartyCaveat(caveatId string) error {
-	return m.addCaveat(caveatId, nil, "")
+// by the target service. The caveat id must be a UTF-8 encoded
+// string.
+func (m *Macaroon) AddFirstPartyCaveat(condition string) error {
+	if !utf8.ValidString(condition) {
+		return fmt.Errorf("first party caveat condition is not a valid utf-8 string")
+	}
+	m.addCaveat([]byte(condition), nil, "")
+	return nil
 }
 
 // AddThirdPartyCaveat adds a third-party caveat to the macaroon,
@@ -183,11 +166,11 @@ func (m *Macaroon) AddFirstPartyCaveat(caveatId string) error {
 // way, either by encrypting it with a key known to the third party
 // or by holding a reference to it stored in the third party's
 // storage.
-func (m *Macaroon) AddThirdPartyCaveat(rootKey []byte, caveatId string, loc string) error {
+func (m *Macaroon) AddThirdPartyCaveat(rootKey, caveatId []byte, loc string) error {
 	return m.addThirdPartyCaveatWithRand(rootKey, caveatId, loc, rand.Reader)
 }
 
-func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey []byte, caveatId string, loc string, r io.Reader) error {
+func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey, caveatId []byte, loc string, r io.Reader) error {
 	derivedKey := makeKey(rootKey)
 	verificationId, err := encrypt(&m.sig, derivedKey, r)
 	if err != nil {
@@ -240,10 +223,10 @@ func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, disch
 }
 
 func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check func(caveat string) error, discharges []*Macaroon, used []int) error {
-	caveatSig := keyedHash(rootKey, m.dataBytes(m.id))
+	caveatSig := keyedHash(rootKey, m.id)
 	for i, cav := range m.caveats {
 		if cav.isThirdParty() {
-			cavKey, err := decrypt(caveatSig, m.dataBytes(cav.verificationId))
+			cavKey, err := decrypt(caveatSig, cav.VerificationId)
 			if err != nil {
 				return fmt.Errorf("failed to decrypt caveat %d signature: %v", i, err)
 			}
@@ -253,7 +236,7 @@ func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check 
 			// with the required id.
 			found := false
 			for di, dm := range discharges {
-				if !bytes.Equal(dm.dataBytes(dm.id), m.dataBytes(cav.caveatId)) {
+				if !bytes.Equal(dm.id, cav.Id) {
 					continue
 				}
 				found = true
@@ -269,14 +252,14 @@ func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check 
 				break
 			}
 			if !found {
-				return fmt.Errorf("cannot find discharge macaroon for caveat %q", m.dataBytes(cav.caveatId))
+				return fmt.Errorf("cannot find discharge macaroon for caveat %x", cav.Id)
 			}
 		} else {
-			if err := check(string(m.dataBytes(cav.caveatId))); err != nil {
+			if err := check(string(cav.Id)); err != nil {
 				return err
 			}
 		}
-		caveatSig = keyedHash2(caveatSig, m.dataBytes(cav.verificationId), m.dataBytes(cav.caveatId))
+		caveatSig = keyedHash2(caveatSig, cav.VerificationId, cav.Id)
 	}
 	// TODO perhaps we should actually do this check before doing
 	// all the potentially expensive caveat checks.

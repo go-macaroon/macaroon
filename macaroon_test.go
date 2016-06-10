@@ -1,7 +1,6 @@
 package macaroon_test
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -10,7 +9,7 @@ import (
 
 	gc "gopkg.in/check.v1"
 
-	"gopkg.in/macaroon.v1"
+	"gopkg.in/macaroon.v2-unstable"
 )
 
 func TestPackage(t *testing.T) {
@@ -27,9 +26,9 @@ func never(string) error {
 
 func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, "some id", "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location")
 	c.Assert(m.Location(), gc.Equals, "a location")
-	c.Assert(m.Id(), gc.Equals, "some id")
+	c.Assert(m.Id(), gc.DeepEquals, []byte("some id"))
 
 	err := m.Verify(rootKey, never, nil)
 	c.Assert(err, gc.IsNil)
@@ -37,7 +36,7 @@ func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 
 func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, "some id", "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location")
 
 	caveats := map[string]bool{
 		"a caveat":       true,
@@ -70,10 +69,10 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, "some id", "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location")
 
 	dischargeRootKey := []byte("shared root key")
-	thirdPartyCaveatId := "3rd party caveat"
+	thirdPartyCaveatId := []byte("3rd party caveat")
 	err := m.AddThirdPartyCaveat(dischargeRootKey, thirdPartyCaveatId, "remote.com")
 	c.Assert(err, gc.IsNil)
 
@@ -85,9 +84,9 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestThirdPartyCaveatBadRandom(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, "some id", "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location")
 	dischargeRootKey := []byte("shared root key")
-	thirdPartyCaveatId := "3rd party caveat"
+	thirdPartyCaveatId := []byte("3rd party caveat")
 
 	err := macaroon.AddThirdPartyCaveatWithRand(m, dischargeRootKey, thirdPartyCaveatId, "remote.com", &macaroon.ErrorReader{})
 	c.Assert(err, gc.ErrorMatches, "cannot generate random bytes: fail")
@@ -119,7 +118,7 @@ var verifyTests = []struct {
 		conditions: map[string]bool{
 			"wonderful": true,
 		},
-		expectErr: `cannot find discharge macaroon for caveat "bob-is-great"`,
+		expectErr: fmt.Sprintf(`cannot find discharge macaroon for caveat %x`, "bob-is-great"),
 	}},
 }, {
 	about: "single third party caveat with discharge",
@@ -360,7 +359,7 @@ var verifyTests = []struct {
 			"wonderful": true,
 			"splendid":  true,
 		},
-		expectErr: `cannot find discharge macaroon for caveat "barbara-is-great"`,
+		expectErr: fmt.Sprintf(`cannot find discharge macaroon for caveat %x`, "barbara-is-great"),
 	}},
 }, {
 	about:     "recursive third party caveats",
@@ -487,7 +486,7 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 
 func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	rootKey := []byte("secret")
-	m0 := MustNew(rootKey, "some id", "a location")
+	m0 := MustNew(rootKey, []byte("some id"), "a location")
 	m0.AddFirstPartyCaveat("account = 3735928559")
 	m0JSON, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
@@ -495,7 +494,7 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 	err = json.Unmarshal(m0JSON, &m1)
 	c.Assert(err, gc.IsNil)
 	c.Assert(m0.Location(), gc.Equals, m1.Location())
-	c.Assert(m0.Id(), gc.Equals, m1.Id())
+	c.Assert(string(m0.Id()), gc.Equals, string(m1.Id()))
 	c.Assert(
 		hex.EncodeToString(m0.Signature()),
 		gc.Equals,
@@ -571,10 +570,10 @@ func makeMacaroons(mspecs []macaroonSpec) (
 }
 
 func makeMacaroon(mspec macaroonSpec) *macaroon.Macaroon {
-	m := MustNew([]byte(mspec.rootKey), mspec.id, mspec.location)
+	m := MustNew([]byte(mspec.rootKey), []byte(mspec.id), mspec.location)
 	for _, cav := range mspec.caveats {
 		if cav.location != "" {
-			err := m.AddThirdPartyCaveat([]byte(cav.rootKey), cav.condition, cav.location)
+			err := m.AddThirdPartyCaveat([]byte(cav.rootKey), []byte(cav.condition), cav.location)
 			if err != nil {
 				panic(err)
 			}
@@ -601,12 +600,12 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 	// Test the binary marshalling and unmarshalling of a macaroon with
 	// first and third party caveats.
 	rootKey := []byte("secret")
-	m0 := MustNew(rootKey, "some id", "a location")
+	m0 := MustNew(rootKey, []byte("some id"), "a location")
 	err := m0.AddFirstPartyCaveat("first caveat")
 	c.Assert(err, gc.IsNil)
 	err = m0.AddFirstPartyCaveat("second caveat")
 	c.Assert(err, gc.IsNil)
-	err = m0.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", "remote.com")
+	err = m0.AddThirdPartyCaveat([]byte("shared root key"), []byte("3rd party caveat"), "remote.com")
 	c.Assert(err, gc.IsNil)
 	data, err := m0.MarshalBinary()
 	c.Assert(err, gc.IsNil)
@@ -631,19 +630,15 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	assertEqualMacaroons(c, &m0, &m1)
 }
 
-func (*macaroonSuite) TestMacaroonFieldsTooBig(c *gc.C) {
+func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
 	rootKey := []byte("secret")
-	toobig := make([]byte, macaroon.MaxPacketLen)
-	_, err := rand.Reader.Read(toobig)
-	c.Assert(err, gc.IsNil)
-	_, err = macaroon.New(rootKey, string(toobig), "a location")
-	c.Assert(err, gc.ErrorMatches, "macaroon identifier too big")
-	_, err = macaroon.New(rootKey, "some id", string(toobig))
-	c.Assert(err, gc.ErrorMatches, "macaroon location too big")
+	badString := "foo\xff"
+	_, err := macaroon.New(rootKey, []byte("some id"), badString)
+	c.Assert(err, gc.ErrorMatches, `location "foo\\xff" is not a valid utf-8 string`)
 
-	m0 := MustNew(rootKey, "some id", "a location")
-	err = m0.AddThirdPartyCaveat([]byte("shared root key"), string(toobig), "remote.com")
-	c.Assert(err, gc.ErrorMatches, "caveat identifier too big")
-	err = m0.AddThirdPartyCaveat([]byte("shared root key"), "3rd party caveat", string(toobig))
-	c.Assert(err, gc.ErrorMatches, "caveat location too big")
+	m0 := MustNew(rootKey, []byte("some id"), "a location")
+	err = m0.AddFirstPartyCaveat(badString)
+	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
+	err = m0.AddThirdPartyCaveat(rootKey, []byte("3rd party caveat"), badString)
+	c.Assert(err, gc.ErrorMatches, `caveat location is not a valid utf-8 string`)
 }
