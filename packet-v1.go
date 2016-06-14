@@ -58,6 +58,9 @@ func parsePacketV1(data []byte) (packetV1, error) {
 	if plen > len(data) {
 		return packetV1{}, fmt.Errorf("packet size too big")
 	}
+	if plen < 4 {
+		return packetV1{}, fmt.Errorf("packet size too small")
+	}
 	data = data[4:plen]
 	i := bytes.IndexByte(data, ' ')
 	if i <= 0 {
