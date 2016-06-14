@@ -45,6 +45,9 @@ var parsePacketV1Tests = []struct {
 	data:      "0015field some data\n",
 	expectErr: "packet size too big",
 }, {
+	data:      "0003a\n",
+	expectErr: "packet size too small",
+}, {
 	data:      "0014fieldwithoutanyspaceordata\n",
 	expectErr: "cannot parse field name",
 }, {

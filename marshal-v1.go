@@ -75,7 +75,7 @@ func (m *Macaroon) initJSONV1(mjson *macaroonJSONV1) error {
 }
 
 // The original (v1) binary format of a macaroon is as follows.
-// Each identifier repesents a v1 packet.
+// Each identifier represents a v1 packet.
 //
 // location
 // identifier
