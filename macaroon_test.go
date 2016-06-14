@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
 	"gopkg.in/macaroon.v2-unstable"
@@ -484,9 +485,26 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 	}
 }
 
-func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
+// jsonTestVersions holds the various possible ways of marshaling a macaroon
+// to JSON.
+var jsonTestVersions = []macaroon.MarshalOpts{
+	macaroon.MarshalV1 | macaroon.MarshalJSON,
+	macaroon.MarshalV2 | macaroon.MarshalJSON,
+	macaroon.MarshalV1 | macaroon.MarshalJSON | macaroon.MarshalJSONObject,
+	macaroon.MarshalV2 | macaroon.MarshalJSON | macaroon.MarshalJSONObject,
+}
+
+func (s *macaroonSuite) TestMarshalJSON(c *gc.C) {
+	for i, vers := range jsonTestVersions {
+		c.Logf("test %d: %v", i, vers)
+		s.testMarshalJSONWithVersion(c, vers)
+	}
+}
+
+func (*macaroonSuite) testMarshalJSONWithVersion(c *gc.C, vers macaroon.MarshalOpts) {
 	rootKey := []byte("secret")
 	m0 := MustNew(rootKey, []byte("some id"), "a location")
+	m0.MarshalAs(vers)
 	m0.AddFirstPartyCaveat("account = 3735928559")
 	m0JSON, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
@@ -499,10 +517,14 @@ func (*macaroonSuite) TestMarshalJSON(c *gc.C) {
 		hex.EncodeToString(m0.Signature()),
 		gc.Equals,
 		hex.EncodeToString(m1.Signature()))
+	c.Assert(m1.UnmarshaledAs(), gc.Equals, vers)
 }
 
-func (*macaroonSuite) TestJSONRoundTrip(c *gc.C) {
-	// jsonData produced from the second example in libmacaroons
+var jsonRoundTripTests = []struct {
+	about string
+	// data holds the marshaled data. All the data values hold
+	// different encodings of the same macaroon - the same as produced
+	// from the second example in libmacaroons
 	// example README with the following libmacaroons code:
 	//
 	// secret = 'this is a different super-secret key; never use the same secret twice'
@@ -515,28 +537,158 @@ func (*macaroonSuite) TestJSONRoundTrip(c *gc.C) {
 	// identifier = 'this was how we remind auth of key/pred'
 	// M = M.add_third_party_caveat('http://auth.mybank/', caveat_key, identifier)
 	// m.serialize_json()
+	data                 string
+	expectExactRoundTrip bool
+	expectVers           macaroon.MarshalOpts
+}{{
+	about:                "exact JSON as produced by libmacaroons",
+	data:                 `{"caveats":[{"cid":"account = 3735928559"},{"cid":"this was how we remind auth of key\/pred","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","cl":"http:\/\/auth.mybank\/"}],"location":"http:\/\/mybank\/","identifier":"we used our other secret key","signature":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectVers:           macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV1,
+	expectExactRoundTrip: true,
+}, {
+	about:      "V2 object with hex binary values",
+	data:       `{"c":[{"i":"account = 3735928559"},{"i":"this was how we remind auth of key/pred","vH":"000000000000000000000000000000000000000000000000d36ec502e05886d1f0279f055fa52554d16d16c1b14074bbb83ff0fdd79dc2fe098f0ed4a2b091130e6b5db46a20a86b","l":"http://auth.mybank/"}],"l":"http://mybank/","iH":"77652075736564206f7572206f7468657220736563726574206b6579","sH":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectVers: macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+}, {
+	about:      "V2 object with std base-64 binary values",
+	data:       `{"c":[{"i64":"YWNjb3VudCA9IDM3MzU5Mjg1NTk="},{"i64":"dGhpcyB3YXMgaG93IHdlIHJlbWluZCBhdXRoIG9mIGtleS9wcmVk","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD/w/dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i64":"d2UgdXNlZCBvdXIgb3RoZXIgc2VjcmV0IGtleQ==","s64":"0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9Vw="}`,
+	expectVers: macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+}, {
+	about:      "V2 object with URL base-64 binary values",
+	data:       `{"c":[{"i64":"YWNjb3VudCA9IDM3MzU5Mjg1NTk"},{"i64":"dGhpcyB3YXMgaG93IHdlIHJlbWluZCBhdXRoIG9mIGtleS9wcmVk","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i64":"d2UgdXNlZCBvdXIgb3RoZXIgc2VjcmV0IGtleQ","s64":"0n2y_R8idg5MPa6BN-LY_B32wHQcGK7UuXJWv3jR9Vw"}`,
+	expectVers: macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+}, {
+	about:                "V2 object with URL base-64 binary values and strings for ASCII",
+	data:                 `{"c":[{"i":"account = 3735928559"},{"i":"this was how we remind auth of key/pred","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i":"we used our other secret key","s64":"0n2y_R8idg5MPa6BN-LY_B32wHQcGK7UuXJWv3jR9Vw"}`,
+	expectVers:           macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+	expectExactRoundTrip: true,
+}, {
+	about: "V2 base64 encoded binary",
+	data: `"` +
+		base64.StdEncoding.EncodeToString([]byte(
+			"\x02"+
+				"\x01\x0ehttp://mybank/"+
+				"\x02\x1cwe used our other secret key"+
+				"\x00"+
+				"\x02\x14account = 3735928559"+
+				"\x00"+
+				"\x01\x13http://auth.mybank/"+
+				"\x02'this was how we remind auth of key/pred"+
+				"\x04\x48\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xd3\x6e\xc5\x02\xe0\x58\x86\xd1\xf0\x27\x9f\x05\x5f\xa5\x25\x54\xd1\x6d\x16\xc1\xb1\x40\x74\xbb\xb8\x3f\xf0\xfd\xd7\x9d\xc2\xfe\x09\x8f\x0e\xd4\xa2\xb0\x91\x13\x0e\x6b\x5d\xb4\x6a\x20\xa8\x6b"+
+				"\x00"+
+				"\x00"+
+				"\x06\x20\xd2\x7d\xb2\xfd\x1f\x22\x76\x0e\x4c\x3d\xae\x81\x37\xe2\xd8\xfc\x1d\xf6\xc0\x74\x1c\x18\xae\xd4\xb9\x72\x56\xbf\x78\xd1\xf5\x5c",
+		)) + `"`,
+	expectVers:           macaroon.MarshalJSON | macaroon.MarshalJSON | macaroon.MarshalV2,
+	expectExactRoundTrip: true,
+}}
 
-	jsonData := `{"caveats":[{"cid":"account = 3735928559"},{"cid":"this was how we remind auth of key\/pred","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","cl":"http:\/\/auth.mybank\/"}],"location":"http:\/\/mybank\/","identifier":"we used our other secret key","signature":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`
+func (s *macaroonSuite) TestJSONRoundTrip(c *gc.C) {
+	for i, test := range jsonRoundTripTests {
+		c.Logf("test %d (%v) %s", i, test.expectVers, test.about)
+		s.testJSONRoundTripWithVersion(c, test.data, test.expectVers, test.expectExactRoundTrip)
+	}
+}
 
+func (*macaroonSuite) testJSONRoundTripWithVersion(c *gc.C, jsonData string, vers macaroon.MarshalOpts, expectExactRoundTrip bool) {
+	assertMacaroon := func(m *macaroon.Macaroon) {
+		c.Assert(fmt.Sprintf("%x", m.Signature()), gc.Equals,
+			"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c")
+		c.Assert(m.Location(), gc.Equals, "http://mybank/")
+		c.Assert(string(m.Id()), gc.Equals, "we used our other secret key")
+		c.Assert(m.Caveats(), jc.DeepEquals, []macaroon.Caveat{{
+			Id: []byte("account = 3735928559"),
+		}, {
+			Id:             []byte("this was how we remind auth of key/pred"),
+			VerificationId: decodeB64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr"),
+			Location:       "http://auth.mybank/",
+		}})
+		c.Assert(m.UnmarshaledAs(), gc.Equals, vers)
+	}
 	var m macaroon.Macaroon
 	err := json.Unmarshal([]byte(jsonData), &m)
 	c.Assert(err, gc.IsNil)
-	c.Assert(hex.EncodeToString(m.Signature()), gc.Equals,
-		"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c")
+	assertMacaroon(&m)
+
+	m.MarshalAs(vers)
 	data, err := m.MarshalJSON()
 	c.Assert(err, gc.IsNil)
 
-	// Check that the round-tripped data is the same as the original
-	// data when unmarshalled into an interface{}.
-	var got interface{}
-	err = json.Unmarshal(data, &got)
-	c.Assert(err, gc.IsNil)
+	if expectExactRoundTrip {
+		// The data is in canonical form, so we can check that
+		// the round-tripped data is the same as the original
+		// data when unmarshalled into an interface{}.
+		var got interface{}
+		err = json.Unmarshal(data, &got)
+		c.Assert(err, gc.IsNil)
 
-	var original interface{}
-	err = json.Unmarshal([]byte(jsonData), &original)
-	c.Assert(err, gc.IsNil)
+		var original interface{}
+		err = json.Unmarshal([]byte(jsonData), &original)
+		c.Assert(err, gc.IsNil)
 
-	c.Assert(got, gc.DeepEquals, original)
+		c.Assert(got, jc.DeepEquals, original, gc.Commentf("data: %s", data))
+	}
+	// Check that we can unmarshal the marshaled data anyway
+	// and the macaroon still looks the same.
+	var m1 macaroon.Macaroon
+	err = m1.UnmarshalJSON(data)
+	c.Assert(err, gc.IsNil)
+	assertMacaroon(&m1)
+}
+
+var jsonDecodeErrorTests = []struct {
+	about       string
+	data        string
+	expectError string
+}{{
+	about:       "ambiguous id #1",
+	data:        `{"i": "hello", "i64": "abcd", "s": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectError: "invalid identifier: ambiguous field encoding",
+}, {
+	about:       "ambiguous id #2",
+	data:        `{"iH": "0000", "i64": "abcd", "s": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectError: "invalid identifier: ambiguous field encoding",
+}, {
+	about:       "ambiguous id #3",
+	data:        `{"i": "hello", "iH": "a65b", "s": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectError: "invalid identifier: ambiguous field encoding",
+}, {
+	about:       "ambiguous signature",
+	data:        `{"i": "hello", "sH": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c", "s64": "543467"}`,
+	expectError: "invalid signature: ambiguous field encoding",
+}, {
+	about:       "signature too short",
+	data:        `{"i": "hello", "sH": "7db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectError: "signature has unexpected length 31",
+}, {
+	about:       "signature too long",
+	data:        `{"i": "hello", "sH": "00d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	expectError: "signature has unexpected length 33",
+}, {
+	about:       "invalid caveat id",
+	data:        `{"i": "hello", "sH": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c", "c": [{"i": "hello", "iH": "00"}]}`,
+	expectError: "invalid cid in caveat: ambiguous field encoding",
+}, {
+	about:       "invalid caveat vid",
+	data:        `{"i": "hello", "sH": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c", "c": [{"i": "hello", "v": "hello", "vH": "00"}]}`,
+	expectError: "invalid vid in caveat: ambiguous field encoding",
+}}
+
+func (*macaroonSuite) TestJSONDecodeError(c *gc.C) {
+	for i, test := range jsonDecodeErrorTests {
+		c.Logf("test %d: %v", i, test.about)
+		var m macaroon.Macaroon
+		err := json.Unmarshal([]byte(test.data), &m)
+		c.Assert(err, gc.ErrorMatches, test.expectError)
+	}
+}
+
+func decodeB64(s string) []byte {
+	data, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }
 
 type caveat struct {
@@ -633,12 +785,8 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
 	rootKey := []byte("secret")
 	badString := "foo\xff"
-	_, err := macaroon.New(rootKey, []byte("some id"), badString)
-	c.Assert(err, gc.ErrorMatches, `location "foo\\xff" is not a valid utf-8 string`)
 
 	m0 := MustNew(rootKey, []byte("some id"), "a location")
-	err = m0.AddFirstPartyCaveat(badString)
+	err := m0.AddFirstPartyCaveat(badString)
 	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
-	err = m0.AddThirdPartyCaveat(rootKey, []byte("3rd party caveat"), badString)
-	c.Assert(err, gc.ErrorMatches, `caveat location is not a valid utf-8 string`)
 }

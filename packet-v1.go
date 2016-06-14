@@ -123,3 +123,8 @@ func asciiHex(b byte) (int, bool) {
 	}
 	return 0, false
 }
+
+func isASCIIHex(b byte) bool {
+	_, ok := asciiHex(b)
+	return ok
+}
