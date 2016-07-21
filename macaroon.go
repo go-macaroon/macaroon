@@ -22,12 +22,11 @@ import (
 // Macaroons are mutable objects - use Clone as appropriate
 // to avoid unwanted mutation.
 type Macaroon struct {
-	location      string
-	id            []byte
-	caveats       []Caveat
-	sig           [hashLen]byte
-	marshalAs     MarshalOpts
-	unmarshaledAs MarshalOpts
+	location string
+	id       []byte
+	caveats  []Caveat
+	sig      [hashLen]byte
+	version  Version
 }
 
 // Caveat holds a first person or third party caveat.
@@ -56,21 +55,30 @@ func (cav *Caveat) isThirdParty() bool {
 }
 
 // New returns a new macaroon with the given root key,
-// identifier and location.
-func New(rootKey, id []byte, loc string) (*Macaroon, error) {
+// identifier, location and version.
+func New(rootKey, id []byte, loc string, version Version) (*Macaroon, error) {
 	var m Macaroon
-	m.init(append([]byte(nil), id...), loc)
+	if version < V2 {
+		if !utf8.Valid(id) {
+			return nil, fmt.Errorf("invalid id for %v macaroon", id)
+		}
+		// TODO check id length too.
+	}
+	if version < V1 || version > LatestVersion {
+		return nil, fmt.Errorf("invalid version %v", version)
+	}
+	m.version = version
+	m.init(append([]byte(nil), id...), loc, version)
 	derivedKey := makeKey(rootKey)
 	m.sig = *keyedHash(derivedKey, m.id)
 	return &m, nil
 }
 
 // init initializes the macaroon. It retains a reference to id.
-func (m *Macaroon) init(id []byte, loc string) {
+func (m *Macaroon) init(id []byte, loc string, vers Version) {
 	m.location = loc
 	m.id = append([]byte(nil), id...)
-	m.marshalAs = DefaultMarshalOpts
-	m.unmarshaledAs = DefaultMarshalOpts
+	m.version = vers
 }
 
 // Clone returns a copy of the receiving macaroon.
@@ -120,6 +128,12 @@ func (m *Macaroon) appendCaveat(caveatId, verificationId []byte, loc string) {
 }
 
 func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) error {
+	if m.version < V2 {
+		if !utf8.Valid(caveatId) {
+			return fmt.Errorf("invalid caveat id for %v macaroon", m.version)
+		}
+		// TODO check caveat length too.
+	}
 	m.appendCaveat(caveatId, verificationId, loc)
 	m.sig = *keyedHash2(&m.sig, verificationId, caveatId)
 	return nil

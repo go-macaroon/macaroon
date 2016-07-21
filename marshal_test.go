@@ -12,17 +12,16 @@ type marshalSuite struct{}
 var _ = gc.Suite(&marshalSuite{})
 
 func (s *marshalSuite) TestMarshalUnmarshalMacaroonV1(c *gc.C) {
-	s.testMarshalUnmarshalWithVersion(c, macaroon.MarshalV1)
+	s.testMarshalUnmarshalWithVersion(c, macaroon.V1)
 }
 
 func (s *marshalSuite) TestMarshalUnmarshalMacaroonV2(c *gc.C) {
-	s.testMarshalUnmarshalWithVersion(c, macaroon.MarshalV2)
+	s.testMarshalUnmarshalWithVersion(c, macaroon.V2)
 }
 
-func (*marshalSuite) testMarshalUnmarshalWithVersion(c *gc.C, vers macaroon.MarshalOpts) {
+func (*marshalSuite) testMarshalUnmarshalWithVersion(c *gc.C, vers macaroon.Version) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, []byte("some id"), "a location")
-	m.MarshalAs(vers)
+	m := MustNew(rootKey, []byte("some id"), "a location", vers)
 
 	// Adding the third party caveat before the first party caveat
 	// tests a former bug where the caveat wasn't zeroed
@@ -44,26 +43,50 @@ func (*marshalSuite) testMarshalUnmarshalWithVersion(c *gc.C, vers macaroon.Mars
 	c.Assert(string(um.Id()), gc.Equals, string(m.Id()))
 	c.Assert(um.Signature(), jc.DeepEquals, m.Signature())
 	c.Assert(um.Caveats(), jc.DeepEquals, m.Caveats())
-	c.Assert(um.UnmarshaledAs(), gc.Equals, vers)
-	um.SetUnmarshaledAs(m.UnmarshaledAs())
-	um.MarshalAs(vers)
+	c.Assert(um.Version(), gc.Equals, vers)
+	um.SetVersion(m.Version())
 	c.Assert(m, jc.DeepEquals, &um)
 }
 
+func (s *marshalSuite) TestMarshalBinaryRoundTrip(c *gc.C) {
+	// This data holds the V2 binary encoding of
+	data := []byte(
+		"\x02" +
+			"\x01\x0ehttp://mybank/" +
+			"\x02\x1cwe used our other secret key" +
+			"\x00" +
+			"\x02\x14account = 3735928559" +
+			"\x00" +
+			"\x01\x13http://auth.mybank/" +
+			"\x02'this was how we remind auth of key/pred" +
+			"\x04\x48\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xd3\x6e\xc5\x02\xe0\x58\x86\xd1\xf0\x27\x9f\x05\x5f\xa5\x25\x54\xd1\x6d\x16\xc1\xb1\x40\x74\xbb\xb8\x3f\xf0\xfd\xd7\x9d\xc2\xfe\x09\x8f\x0e\xd4\xa2\xb0\x91\x13\x0e\x6b\x5d\xb4\x6a\x20\xa8\x6b" +
+			"\x00" +
+			"\x00" +
+			"\x06\x20\xd2\x7d\xb2\xfd\x1f\x22\x76\x0e\x4c\x3d\xae\x81\x37\xe2\xd8\xfc\x1d\xf6\xc0\x74\x1c\x18\xae\xd4\xb9\x72\x56\xbf\x78\xd1\xf5\x5c",
+	)
+	var m macaroon.Macaroon
+	err := m.UnmarshalBinary(data)
+	c.Assert(err, gc.Equals, nil)
+	assertLibMacaroonsMacaroon(c, &m)
+	c.Assert(m.Version(), gc.Equals, macaroon.V2)
+
+	data1, err := m.MarshalBinary()
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(data1, jc.DeepEquals, data)
+}
+
 func (s *marshalSuite) TestMarshalUnmarshalSliceV1(c *gc.C) {
-	s.testMarshalUnmarshalSliceWithVersion(c, macaroon.MarshalV1)
+	s.testMarshalUnmarshalSliceWithVersion(c, macaroon.V1)
 }
 
 func (s *marshalSuite) TestMarshalUnmarshalSliceV2(c *gc.C) {
-	s.testMarshalUnmarshalSliceWithVersion(c, macaroon.MarshalV2)
+	s.testMarshalUnmarshalSliceWithVersion(c, macaroon.V2)
 }
 
-func (*marshalSuite) testMarshalUnmarshalSliceWithVersion(c *gc.C, vers macaroon.MarshalOpts) {
+func (*marshalSuite) testMarshalUnmarshalSliceWithVersion(c *gc.C, vers macaroon.Version) {
 	rootKey := []byte("secret")
-	m1 := MustNew(rootKey, []byte("some id"), "a location")
-	m1.MarshalAs(vers)
-	m2 := MustNew(rootKey, []byte("some other id"), "another location")
-	m2.MarshalAs(vers)
+	m1 := MustNew(rootKey, []byte("some id"), "a location", vers)
+	m2 := MustNew(rootKey, []byte("some other id"), "another location", vers)
 
 	err := m1.AddFirstPartyCaveat("a caveat")
 	c.Assert(err, gc.IsNil)
@@ -86,9 +109,8 @@ func (*marshalSuite) testMarshalUnmarshalSliceWithVersion(c *gc.C, vers macaroon
 		c.Assert(string(um.Id()), gc.Equals, string(m.Id()))
 		c.Assert(um.Signature(), jc.DeepEquals, m.Signature())
 		c.Assert(um.Caveats(), jc.DeepEquals, m.Caveats())
-		c.Assert(um.UnmarshaledAs(), gc.Equals, vers)
-		um.MarshalAs(vers)
-		um.SetUnmarshaledAs(m.UnmarshaledAs())
+		c.Assert(um.Version(), gc.Equals, vers)
+		um.SetVersion(m.Version())
 	}
 	c.Assert(macaroons, jc.DeepEquals, unmarshaledMacs)
 
@@ -98,23 +120,23 @@ func (*marshalSuite) testMarshalUnmarshalSliceWithVersion(c *gc.C, vers macaroon
 		err = unmarshaledMacs[0].AddFirstPartyCaveat("caveat")
 		c.Assert(err, gc.IsNil)
 	}
-	unmarshaledMacs[1].SetUnmarshaledAs(macaroons[1].UnmarshaledAs())
+	unmarshaledMacs[1].SetVersion(macaroons[1].Version())
 	c.Assert(unmarshaledMacs[1], jc.DeepEquals, macaroons[1])
 	c.Assert(err, gc.IsNil)
 }
 
 func (s *marshalSuite) TestSliceRoundTripV1(c *gc.C) {
-	s.testSliceRoundTripWithVersion(c, macaroon.MarshalV1)
+	s.testSliceRoundTripWithVersion(c, macaroon.V1)
 }
 
 func (s *marshalSuite) TestSliceRoundTripV2(c *gc.C) {
-	s.testSliceRoundTripWithVersion(c, macaroon.MarshalV2)
+	s.testSliceRoundTripWithVersion(c, macaroon.V2)
 }
 
-func (*marshalSuite) testSliceRoundTripWithVersion(c *gc.C, vers macaroon.MarshalOpts) {
+func (*marshalSuite) testSliceRoundTripWithVersion(c *gc.C, vers macaroon.Version) {
 	rootKey := []byte("secret")
-	m1 := MustNew(rootKey, []byte("some id"), "a location")
-	m2 := MustNew(rootKey, []byte("some other id"), "another location")
+	m1 := MustNew(rootKey, []byte("some id"), "a location", vers)
+	m2 := MustNew(rootKey, []byte("some other id"), "another location", vers)
 
 	err := m1.AddFirstPartyCaveat("a caveat")
 	c.Assert(err, gc.IsNil)

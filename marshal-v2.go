@@ -60,7 +60,7 @@ func (m *Macaroon) initJSONV2(mjson *macaroonJSONV2) error {
 	if err != nil {
 		return fmt.Errorf("invalid identifier: %v", err)
 	}
-	m.init(id, mjson.Location)
+	m.init(id, mjson.Location, V2)
 	sig, err := jsonBinaryField(mjson.Signature, mjson.SignatureHex, mjson.Signature64)
 	if err != nil {
 		return fmt.Errorf("invalid signature: %v", err)
@@ -134,7 +134,7 @@ func jsonBinaryField(s, shex, sb64 string) ([]byte, error) {
 //
 // See also https://github.com/rescrv/libmacaroons/blob/master/doc/format.txt
 
-// parseBinaryV1 parses the given data in V1 format into the macaroon. The macaroon's
+// parseBinaryV2 parses the given data in V2 format into the macaroon. The macaroon's
 // internal data structures will retain references to the data. It
 // returns the data after the end of the macaroon.
 func (m *Macaroon) parseBinaryV2(data []byte) ([]byte, error) {
@@ -155,7 +155,7 @@ func (m *Macaroon) parseBinaryV2(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid macaroon header")
 	}
 	id := section[0].data
-	m.init(id, loc)
+	m.init(id, loc, V2)
 	for {
 		rest, section, err := parseSectionV2(data)
 		if err != nil {
@@ -203,7 +203,6 @@ func (m *Macaroon) parseBinaryV2(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("signature has unexpected length")
 	}
 	copy(m.sig[:], sig.data)
-	m.unmarshaledAs = MarshalV2
 	return data, nil
 }
 

@@ -5,9 +5,9 @@ var (
 	MaxPacketV1Len              = maxPacketV1Len
 )
 
-// SetUnmarshaledAs sets the unmarshaledAs field of m to o;
+// SetVersion sets the version field of m to v;
 // usually so that we can compare it for deep equality with
 // another differently unmarshaled macaroon.
-func (m *Macaroon) SetUnmarshaledAs(o MarshalOpts) {
-	m.unmarshaledAs = o
+func (m *Macaroon) SetVersion(v Version) {
+	m.version = v
 }

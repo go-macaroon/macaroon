@@ -27,7 +27,7 @@ func never(string) error {
 
 func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, []byte("some id"), "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 	c.Assert(m.Location(), gc.Equals, "a location")
 	c.Assert(m.Id(), gc.DeepEquals, []byte("some id"))
 
@@ -37,7 +37,7 @@ func (*macaroonSuite) TestNoCaveats(c *gc.C) {
 
 func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, []byte("some id"), "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 
 	caveats := map[string]bool{
 		"a caveat":       true,
@@ -70,14 +70,14 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, []byte("some id"), "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 
 	dischargeRootKey := []byte("shared root key")
 	thirdPartyCaveatId := []byte("3rd party caveat")
 	err := m.AddThirdPartyCaveat(dischargeRootKey, thirdPartyCaveatId, "remote.com")
 	c.Assert(err, gc.IsNil)
 
-	dm := MustNew(dischargeRootKey, thirdPartyCaveatId, "remote location")
+	dm := MustNew(dischargeRootKey, thirdPartyCaveatId, "remote location", macaroon.LatestVersion)
 	dm.Bind(m.Signature())
 	err = m.Verify(rootKey, never, []*macaroon.Macaroon{dm})
 	c.Assert(err, gc.IsNil)
@@ -85,7 +85,7 @@ func (*macaroonSuite) TestThirdPartyCaveat(c *gc.C) {
 
 func (*macaroonSuite) TestThirdPartyCaveatBadRandom(c *gc.C) {
 	rootKey := []byte("secret")
-	m := MustNew(rootKey, []byte("some id"), "a location")
+	m := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 	dischargeRootKey := []byte("shared root key")
 	thirdPartyCaveatId := []byte("3rd party caveat")
 
@@ -485,13 +485,13 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 	}
 }
 
+// TODO(rog) move the following JSON-marshal tests into marshal_test.go.
+
 // jsonTestVersions holds the various possible ways of marshaling a macaroon
 // to JSON.
-var jsonTestVersions = []macaroon.MarshalOpts{
-	macaroon.MarshalV1 | macaroon.MarshalJSON,
-	macaroon.MarshalV2 | macaroon.MarshalJSON,
-	macaroon.MarshalV1 | macaroon.MarshalJSON | macaroon.MarshalJSONObject,
-	macaroon.MarshalV2 | macaroon.MarshalJSON | macaroon.MarshalJSONObject,
+var jsonTestVersions = []macaroon.Version{
+	macaroon.V1,
+	macaroon.V2,
 }
 
 func (s *macaroonSuite) TestMarshalJSON(c *gc.C) {
@@ -501,10 +501,9 @@ func (s *macaroonSuite) TestMarshalJSON(c *gc.C) {
 	}
 }
 
-func (*macaroonSuite) testMarshalJSONWithVersion(c *gc.C, vers macaroon.MarshalOpts) {
+func (*macaroonSuite) testMarshalJSONWithVersion(c *gc.C, vers macaroon.Version) {
 	rootKey := []byte("secret")
-	m0 := MustNew(rootKey, []byte("some id"), "a location")
-	m0.MarshalAs(vers)
+	m0 := MustNew(rootKey, []byte("some id"), "a location", vers)
 	m0.AddFirstPartyCaveat("account = 3735928559")
 	m0JSON, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
@@ -517,7 +516,7 @@ func (*macaroonSuite) testMarshalJSONWithVersion(c *gc.C, vers macaroon.MarshalO
 		hex.EncodeToString(m0.Signature()),
 		gc.Equals,
 		hex.EncodeToString(m1.Signature()))
-	c.Assert(m1.UnmarshaledAs(), gc.Equals, vers)
+	c.Assert(m1.Version(), gc.Equals, vers)
 }
 
 var jsonRoundTripTests = []struct {
@@ -539,28 +538,28 @@ var jsonRoundTripTests = []struct {
 	// m.serialize_json()
 	data                 string
 	expectExactRoundTrip bool
-	expectVers           macaroon.MarshalOpts
+	expectVers           macaroon.Version
 }{{
 	about:                "exact JSON as produced by libmacaroons",
 	data:                 `{"caveats":[{"cid":"account = 3735928559"},{"cid":"this was how we remind auth of key\/pred","vid":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","cl":"http:\/\/auth.mybank\/"}],"location":"http:\/\/mybank\/","identifier":"we used our other secret key","signature":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
-	expectVers:           macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV1,
+	expectVers:           macaroon.V1,
 	expectExactRoundTrip: true,
 }, {
 	about:      "V2 object with hex binary values",
 	data:       `{"c":[{"i":"account = 3735928559"},{"i":"this was how we remind auth of key/pred","vH":"000000000000000000000000000000000000000000000000d36ec502e05886d1f0279f055fa52554d16d16c1b14074bbb83ff0fdd79dc2fe098f0ed4a2b091130e6b5db46a20a86b","l":"http://auth.mybank/"}],"l":"http://mybank/","iH":"77652075736564206f7572206f7468657220736563726574206b6579","sH":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
-	expectVers: macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+	expectVers: macaroon.V2,
 }, {
 	about:      "V2 object with std base-64 binary values",
 	data:       `{"c":[{"i64":"YWNjb3VudCA9IDM3MzU5Mjg1NTk="},{"i64":"dGhpcyB3YXMgaG93IHdlIHJlbWluZCBhdXRoIG9mIGtleS9wcmVk","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD/w/dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i64":"d2UgdXNlZCBvdXIgb3RoZXIgc2VjcmV0IGtleQ==","s64":"0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9Vw="}`,
-	expectVers: macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+	expectVers: macaroon.V2,
 }, {
 	about:      "V2 object with URL base-64 binary values",
 	data:       `{"c":[{"i64":"YWNjb3VudCA9IDM3MzU5Mjg1NTk"},{"i64":"dGhpcyB3YXMgaG93IHdlIHJlbWluZCBhdXRoIG9mIGtleS9wcmVk","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i64":"d2UgdXNlZCBvdXIgb3RoZXIgc2VjcmV0IGtleQ","s64":"0n2y_R8idg5MPa6BN-LY_B32wHQcGK7UuXJWv3jR9Vw"}`,
-	expectVers: macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+	expectVers: macaroon.V2,
 }, {
 	about:                "V2 object with URL base-64 binary values and strings for ASCII",
 	data:                 `{"c":[{"i":"account = 3735928559"},{"i":"this was how we remind auth of key/pred","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i":"we used our other secret key","s64":"0n2y_R8idg5MPa6BN-LY_B32wHQcGK7UuXJWv3jR9Vw"}`,
-	expectVers:           macaroon.MarshalJSON | macaroon.MarshalJSONObject | macaroon.MarshalV2,
+	expectVers:           macaroon.V2,
 	expectExactRoundTrip: true,
 }, {
 	about: "V2 base64 encoded binary",
@@ -579,8 +578,7 @@ var jsonRoundTripTests = []struct {
 				"\x00"+
 				"\x06\x20\xd2\x7d\xb2\xfd\x1f\x22\x76\x0e\x4c\x3d\xae\x81\x37\xe2\xd8\xfc\x1d\xf6\xc0\x74\x1c\x18\xae\xd4\xb9\x72\x56\xbf\x78\xd1\xf5\x5c",
 		)) + `"`,
-	expectVers:           macaroon.MarshalJSON | macaroon.MarshalJSON | macaroon.MarshalV2,
-	expectExactRoundTrip: true,
+	expectVers: macaroon.V2,
 }}
 
 func (s *macaroonSuite) TestJSONRoundTrip(c *gc.C) {
@@ -590,27 +588,13 @@ func (s *macaroonSuite) TestJSONRoundTrip(c *gc.C) {
 	}
 }
 
-func (*macaroonSuite) testJSONRoundTripWithVersion(c *gc.C, jsonData string, vers macaroon.MarshalOpts, expectExactRoundTrip bool) {
-	assertMacaroon := func(m *macaroon.Macaroon) {
-		c.Assert(fmt.Sprintf("%x", m.Signature()), gc.Equals,
-			"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c")
-		c.Assert(m.Location(), gc.Equals, "http://mybank/")
-		c.Assert(string(m.Id()), gc.Equals, "we used our other secret key")
-		c.Assert(m.Caveats(), jc.DeepEquals, []macaroon.Caveat{{
-			Id: []byte("account = 3735928559"),
-		}, {
-			Id:             []byte("this was how we remind auth of key/pred"),
-			VerificationId: decodeB64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr"),
-			Location:       "http://auth.mybank/",
-		}})
-		c.Assert(m.UnmarshaledAs(), gc.Equals, vers)
-	}
+func (*macaroonSuite) testJSONRoundTripWithVersion(c *gc.C, jsonData string, vers macaroon.Version, expectExactRoundTrip bool) {
 	var m macaroon.Macaroon
 	err := json.Unmarshal([]byte(jsonData), &m)
 	c.Assert(err, gc.IsNil)
-	assertMacaroon(&m)
+	assertLibMacaroonsMacaroon(c, &m)
+	c.Assert(m.Version(), gc.Equals, vers)
 
-	m.MarshalAs(vers)
 	data, err := m.MarshalJSON()
 	c.Assert(err, gc.IsNil)
 
@@ -633,7 +617,25 @@ func (*macaroonSuite) testJSONRoundTripWithVersion(c *gc.C, jsonData string, ver
 	var m1 macaroon.Macaroon
 	err = m1.UnmarshalJSON(data)
 	c.Assert(err, gc.IsNil)
-	assertMacaroon(&m1)
+	assertLibMacaroonsMacaroon(c, &m1)
+	c.Assert(m.Version(), gc.Equals, vers)
+}
+
+// assertLibMacaroonsMacaroon asserts that m looks like the macaroon
+// created in the README of the libmacaroons documentation.
+// In particular, the signature is the same one reported there.
+func assertLibMacaroonsMacaroon(c *gc.C, m *macaroon.Macaroon) {
+	c.Assert(fmt.Sprintf("%x", m.Signature()), gc.Equals,
+		"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c")
+	c.Assert(m.Location(), gc.Equals, "http://mybank/")
+	c.Assert(string(m.Id()), gc.Equals, "we used our other secret key")
+	c.Assert(m.Caveats(), jc.DeepEquals, []macaroon.Caveat{{
+		Id: []byte("account = 3735928559"),
+	}, {
+		Id:             []byte("this was how we remind auth of key/pred"),
+		VerificationId: decodeB64("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD_w_dedwv4Jjw7UorCREw5rXbRqIKhr"),
+		Location:       "http://auth.mybank/",
+	}})
 }
 
 var jsonDecodeErrorTests = []struct {
@@ -722,7 +724,7 @@ func makeMacaroons(mspecs []macaroonSpec) (
 }
 
 func makeMacaroon(mspec macaroonSpec) *macaroon.Macaroon {
-	m := MustNew([]byte(mspec.rootKey), []byte(mspec.id), mspec.location)
+	m := MustNew([]byte(mspec.rootKey), []byte(mspec.id), mspec.location, macaroon.LatestVersion)
 	for _, cav := range mspec.caveats {
 		if cav.location != "" {
 			err := m.AddThirdPartyCaveat([]byte(cav.rootKey), []byte(cav.condition), cav.location)
@@ -752,7 +754,7 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 	// Test the binary marshalling and unmarshalling of a macaroon with
 	// first and third party caveats.
 	rootKey := []byte("secret")
-	m0 := MustNew(rootKey, []byte("some id"), "a location")
+	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 	err := m0.AddFirstPartyCaveat("first caveat")
 	c.Assert(err, gc.IsNil)
 	err = m0.AddFirstPartyCaveat("second caveat")
@@ -786,7 +788,7 @@ func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
 	rootKey := []byte("secret")
 	badString := "foo\xff"
 
-	m0 := MustNew(rootKey, []byte("some id"), "a location")
+	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 	err := m0.AddFirstPartyCaveat(badString)
 	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
 }
