@@ -4,93 +4,49 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strconv"
 )
 
-// MarshalOpts specifies how a macaroon is marshaled.
-type MarshalOpts uint16
+// Version specifies the version of a macaroon.
+// In version 1, the macaroon id and all caveats
+// must be UTF-8-compatible strings, and the
+// size of any part of the macaroon may not exceed
+// approximately 64K. In version 2,
+// all field may be arbitrary binary blobs.
+type Version uint16
 
 const (
-	_ = MarshalOpts(iota)
+	// V1 specifies version 1 macaroons.
+	V1 Version = 1
 
-	// MarshalV1 specifies marshaling in V1 format.
-	MarshalV1
+	// V2 specifies version 2 macaroons.
+	V2 Version = 2
 
-	// MarshalV2 specifies marshaling in V2 format.
-	MarshalV2
-
-	// MarshalJSONObject specifies that when marshaling JSON,
-	// the macaroon should be marshaled as a JSON object
-	// rather than a base64-encoded string.
-	MarshalJSONObject = 1 << 5
-
-	// MarshalJSON specifies that the object was unmarshaled
-	// as JSON. This is ignored when marshaling, as the method
-	// called to marshal the macaroon will determine whether
-	// the macaroon is marshaled as JSON or not.
-	MarshalJSON = 1 << 6
-
-	// MarshalVersion is the mask for the version bits.
-	MarshalVersion = 0xf
-
-	// DefaultMarshalOpts holds the formatting options
-	// that will be used by default.
-	DefaultMarshalOpts = MarshalV1 | MarshalJSONObject
+	// LatestVersion holds the latest supported version.
+	LatestVersion = V2
 )
 
-// String returns a string representation of the marshal opts;
-// for example MarshalV1|MarshalJSON formats as
-// "v1,json".
-func (o MarshalOpts) String() string {
-	buf := make([]byte, 0, 10)
-	buf = append(buf, 'v')
-	buf = strconv.AppendInt(buf, int64(o&MarshalVersion), 10)
-	o &^= MarshalVersion
-	if o&MarshalJSON != 0 {
-		buf = append(buf, ",json"...)
-	}
-	if o&MarshalJSONObject != 0 {
-		buf = append(buf, ",object"...)
-	}
-	o &^= MarshalJSON | MarshalJSONObject
-	if o != 0 {
-		buf = append(buf, fmt.Sprintf(",other%x", int(o))...)
-	}
-	return string(buf)
+// String returns a string representation of the version;
+// for example V1 formats as "v1".
+func (v Version) String() string {
+	return fmt.Sprintf("v%d", v)
 }
 
-// MarshalAs specifies that the macaroon should be marshaled according
-// to the specified options.
-// By default, macaroons are formatted using DefaultMarshalOpts.
-func (m *Macaroon) MarshalAs(opts MarshalOpts) {
-	m.marshalAs = opts
-}
-
-// UnmarshaledAs returned information on the format
-// that the macaroon was unmarshaled as.
-// If the macaroon was created with New, it returns DefaultMarshalOpts.
-func (m *Macaroon) UnmarshaledAs() MarshalOpts {
-	return m.unmarshaledAs
+// Version returns the version of the macaroon.
+func (m *Macaroon) Version() Version {
+	return m.version
 }
 
 // MarshalJSON implements json.Marshaler by marshaling the
-// macaroon in JSON format, using the version specified in M
+// macaroon in JSON format. The serialisation format is determined
+// by the macaroon's version.
 func (m *Macaroon) MarshalJSON() ([]byte, error) {
-	switch m.marshalAs &^ MarshalJSON {
-	case MarshalV1 | MarshalJSONObject:
+	switch m.version {
+	case V1:
 		return m.marshalJSONV1()
-	case MarshalV1:
-		data, err := m.appendBinaryV1(nil)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(data)
-	case MarshalV2 | MarshalJSONObject:
+	case V2:
 		return m.marshalJSONV2()
-	case MarshalV2:
-		return json.Marshal(m.appendBinaryV2(nil))
 	default:
-		return nil, fmt.Errorf("bad marshal options %v", m.marshalAs)
+		return nil, fmt.Errorf("unknown version %v", m.version)
 	}
 }
 
@@ -98,6 +54,9 @@ func (m *Macaroon) MarshalJSON() ([]byte, error) {
 // the given macaroon in JSON format. It accepts both V1 and V2
 // forms encoded forms, and also a base64-encoded JSON string
 // containing the binary-marshaled macaroon.
+//
+// After unmarshaling, the macaroon's version will reflect
+// the version that it was unmarshaled as.
 func (m *Macaroon) UnmarshalJSON(data []byte) error {
 	if data[0] == '"' {
 		// It's a string, so it must be a base64-encoded binary form.
@@ -112,7 +71,6 @@ func (m *Macaroon) UnmarshalJSON(data []byte) error {
 		if err := m.UnmarshalBinary(data); err != nil {
 			return err
 		}
-		m.unmarshaledAs |= MarshalJSON
 		return nil
 	}
 	// Not a string; try to unmarshal into both kinds of macaroon object.
@@ -132,17 +90,16 @@ func (m *Macaroon) UnmarshalJSON(data []byte) error {
 		if err := m.initJSONV1(both.macaroonJSONV1); err != nil {
 			return err
 		}
-		m.unmarshaledAs = MarshalV1 | MarshalJSON | MarshalJSONObject
-		return nil
+		m.version = V1
 	case both.macaroonJSONV2 != nil:
 		if err := m.initJSONV2(both.macaroonJSONV2); err != nil {
 			return err
 		}
-		m.unmarshaledAs = MarshalV2 | MarshalJSON | MarshalJSONObject
-		return nil
+		m.version = V2
 	default:
 		return fmt.Errorf("invalid JSON macaroon encoding")
 	}
+	return nil
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler.
@@ -170,7 +127,7 @@ func (m *Macaroon) parseBinary(data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal v2: %v", err)
 		}
-		m.unmarshaledAs = MarshalV2
+		m.version = V2
 		return data, nil
 	}
 	if isASCIIHex(v) {
@@ -179,7 +136,7 @@ func (m *Macaroon) parseBinary(data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal v1: %v", err)
 		}
-		m.unmarshaledAs = MarshalV1
+		m.version = V1
 		return data, nil
 	}
 	return nil, fmt.Errorf("cannot determine data format of binary-encoded macaroon")
@@ -193,16 +150,16 @@ func (m *Macaroon) MarshalBinary() ([]byte, error) {
 }
 
 // appendBinary appends the binary-formatted macaroon to
-// the given data, formatting it according to the version
-// specified by MarshalAs.
+// the given data, formatting it according to the macaroon's
+// version.
 func (m *Macaroon) appendBinary(data []byte) ([]byte, error) {
-	switch m.marshalAs & MarshalVersion {
-	case MarshalV1:
+	switch m.version {
+	case V1:
 		return m.appendBinaryV1(data)
-	case MarshalV2:
+	case V2:
 		return m.appendBinaryV2(data), nil
 	default:
-		return nil, fmt.Errorf("bad marshal options %v", m.marshalAs)
+		return nil, fmt.Errorf("bad macaroon version %v", m.version)
 	}
 }
 

@@ -54,7 +54,7 @@ func (m *Macaroon) marshalJSONV1() ([]byte, error) {
 // initJSONV1 initializes m from the JSON-unmarshaled data
 // held in mjson.
 func (m *Macaroon) initJSONV1(mjson *macaroonJSONV1) error {
-	m.init([]byte(mjson.Identifier), mjson.Location)
+	m.init([]byte(mjson.Identifier), mjson.Location, V1)
 	sig, err := hex.DecodeString(mjson.Signature)
 	if err != nil {
 		return fmt.Errorf("cannot decode macaroon signature %q: %v", m.sig, err)
@@ -102,7 +102,7 @@ func (m *Macaroon) parseBinaryV1(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	data = data[id.totalLen:]
-	m.init(id.data, string(loc.data))
+	m.init(id.data, string(loc.data), V1)
 	var cav Caveat
 	for {
 		p, err := parsePacketV1(data)
