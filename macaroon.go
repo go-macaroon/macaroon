@@ -159,12 +159,8 @@ func (m *Macaroon) Bind(sig []byte) {
 // AddFirstPartyCaveat adds a caveat that will be verified
 // by the target service. The caveat id must be a UTF-8 encoded
 // string.
-func (m *Macaroon) AddFirstPartyCaveat(condition string) error {
-	if !utf8.ValidString(condition) {
-		return fmt.Errorf("first party caveat condition is not a valid utf-8 string")
-	}
-	m.addCaveat([]byte(condition), nil, "")
-	return nil
+func (m *Macaroon) AddFirstPartyCaveat(id []byte) error {
+	return m.addCaveat(id, nil, "")
 }
 
 // AddThirdPartyCaveat adds a third-party caveat to the macaroon,
@@ -185,8 +181,7 @@ func (m *Macaroon) addThirdPartyCaveatWithRand(rootKey, caveatId []byte, loc str
 	if err != nil {
 		return err
 	}
-	m.addCaveat(caveatId, verificationId, loc)
-	return nil
+	return m.addCaveat(caveatId, verificationId, loc)
 }
 
 var zeroKey [hashLen]byte

@@ -36,7 +36,7 @@ func BenchmarkAddCaveat(b *testing.B) {
 		b.StopTimer()
 		m := MustNew(rootKey, id, loc, macaroon.LatestVersion)
 		b.StartTimer()
-		m.AddFirstPartyCaveat("some caveat stuff")
+		m.AddFirstPartyCaveat([]byte("some caveat stuff"))
 	}
 }
 
