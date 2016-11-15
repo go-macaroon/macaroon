@@ -41,13 +41,13 @@ func BenchmarkAddCaveat(b *testing.B) {
 }
 
 func benchmarkVerify(b *testing.B, mspecs []macaroonSpec) {
-	rootKey, primary, discharges := makeMacaroons(mspecs)
+	rootKey, macaroons := makeMacaroons(mspecs)
 	check := func(string) error {
 		return nil
 	}
 	b.ResetTimer()
 	for i := b.N - 1; i >= 0; i-- {
-		err := primary.Verify(rootKey, check, discharges)
+		err := macaroons[0].Verify(rootKey, check, macaroons[1:])
 		if err != nil {
 			b.Fatalf("verification failed: %v", err)
 		}
