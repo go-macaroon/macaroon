@@ -232,6 +232,28 @@ func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, disch
 	return nil
 }
 
+// VerifySignature verifies the signature of the given macaroon with respect
+// to the root key, but it does not validate any first-party caveats. Instead
+// it returns all the applicable first party caveats on success.
+//
+// The caller is responsible for checking the returned first party caveat
+// conditions.
+func (m *Macaroon) VerifySignature(rootKey []byte, discharges []*Macaroon) ([]string, error) {
+	n := len(m.caveats)
+	for _, dm := range discharges {
+		n += len(dm.caveats)
+	}
+	conds := make([]string, 0, n)
+	err := m.Verify(rootKey, func(cond string) error {
+		conds = append(conds, cond)
+		return nil
+	}, discharges)
+	if err != nil {
+		return nil, err
+	}
+	return conds, nil
+}
+
 func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check func(caveat string) error, discharges []*Macaroon, used []int) error {
 	caveatSig := keyedHash(rootKey, m.id)
 	for i, cav := range m.caveats {

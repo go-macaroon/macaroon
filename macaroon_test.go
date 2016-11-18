@@ -458,7 +458,7 @@ var recursiveThirdPartyCaveatMacaroons = []macaroonSpec{{
 func (*macaroonSuite) TestVerify(c *gc.C) {
 	for i, test := range verifyTests {
 		c.Logf("test %d: %s", i, test.about)
-		rootKey, primary, discharges := makeMacaroons(test.macaroons)
+		rootKey, macaroons := makeMacaroons(test.macaroons)
 		for _, cond := range test.conditions {
 			c.Logf("conditions %#v", cond.conditions)
 			check := func(cav string) error {
@@ -467,10 +467,10 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 				}
 				return fmt.Errorf("condition %q not met", cav)
 			}
-			err := primary.Verify(
+			err := macaroons[0].Verify(
 				rootKey,
 				check,
-				discharges,
+				macaroons[1:],
 			)
 			if cond.expectErr != "" {
 				c.Assert(err, gc.ErrorMatches, cond.expectErr)
@@ -479,10 +479,41 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 			}
 
 			// Cloned macaroon should have same verify result.
-			cloneErr := primary.Clone().Verify(rootKey, check, discharges)
+			cloneErr := macaroons[0].Clone().Verify(rootKey, check, macaroons[1:])
 			c.Assert(cloneErr, gc.DeepEquals, err)
 		}
 	}
+}
+
+func (*macaroonSuite) TestVerifySignature(c *gc.C) {
+	rootKey, macaroons := makeMacaroons([]macaroonSpec{{
+		rootKey: "xxx",
+		id:      "hello",
+		caveats: []caveat{{
+			rootKey:   "y",
+			condition: "something",
+			location:  "somewhere",
+		}, {
+			condition: "cond1",
+		}, {
+			condition: "cond2",
+		}},
+	}, {
+		rootKey: "y",
+		id:      "something",
+		caveats: []caveat{{
+			condition: "cond3",
+		}, {
+			condition: "cond4",
+		}},
+	}})
+	conds, err := macaroons[0].VerifySignature(rootKey, macaroons[1:])
+	c.Assert(err, gc.IsNil)
+	c.Assert(conds, jc.DeepEquals, []string{"cond3", "cond4", "cond1", "cond2"})
+
+	conds, err = macaroons[0].VerifySignature(nil, macaroons[1:])
+	c.Assert(err, gc.ErrorMatches, `failed to decrypt caveat 0 signature: decryption failure`)
+	c.Assert(conds, gc.IsNil)
 }
 
 // TODO(rog) move the following JSON-marshal tests into marshal_test.go.
@@ -706,21 +737,15 @@ type macaroonSpec struct {
 	location string
 }
 
-func makeMacaroons(mspecs []macaroonSpec) (
-	rootKey []byte,
-	primary *macaroon.Macaroon,
-	discharges []*macaroon.Macaroon,
-) {
-	var macaroons []*macaroon.Macaroon
+func makeMacaroons(mspecs []macaroonSpec) (rootKey []byte, macaroons macaroon.Slice) {
 	for _, mspec := range mspecs {
 		macaroons = append(macaroons, makeMacaroon(mspec))
 	}
-	primary = macaroons[0]
-	discharges = macaroons[1:]
-	for _, m := range discharges {
+	primary := macaroons[0]
+	for _, m := range macaroons[1:] {
 		m.Bind(primary.Signature())
 	}
-	return []byte(mspecs[0].rootKey), primary, discharges
+	return []byte(mspecs[0].rootKey), macaroons
 }
 
 func makeMacaroon(mspec macaroonSpec) *macaroon.Macaroon {
