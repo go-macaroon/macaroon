@@ -64,7 +64,7 @@ func (m *Macaroon) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &s); err != nil {
 			return err
 		}
-		data, err := base64Decode([]byte(s))
+		data, err := Base64Decode([]byte(s))
 		if err != nil {
 			return err
 		}
@@ -201,17 +201,35 @@ func (s *Slice) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// base64Decode base64-decodes the given data.
-// It accepts both standard padded encoding and unpadded
-// URL encoding.
-func base64Decode(data []byte) ([]byte, error) {
-	// Make a buffer that's big enough for both padded and
-	// unpadded cases.
-	buf := make([]byte, base64.RawStdEncoding.DecodedLen(len(data)))
-	if n, err := base64.StdEncoding.Decode(buf, data); err == nil {
-		return buf[0:n], nil
+const (
+	padded = 1 << iota
+	stdEncoding
+)
+
+var codecs = [4]*base64.Encoding{
+	0:                    base64.RawURLEncoding,
+	padded:               base64.URLEncoding,
+	stdEncoding:          base64.RawStdEncoding,
+	stdEncoding | padded: base64.StdEncoding,
+}
+
+// Base64Decode base64-decodes the given data.
+// It accepts both standard and URL encodings, both
+// padded and unpadded.
+func Base64Decode(data []byte) ([]byte, error) {
+	encoding := 0
+	if len(data) > 0 && data[len(data)-1] == '=' {
+		encoding |= padded
 	}
-	n, err := base64.RawURLEncoding.Decode(buf, data)
+	for _, b := range data {
+		if b == '/' || b == '+' {
+			encoding |= stdEncoding
+			break
+		}
+	}
+	codec := codecs[encoding]
+	buf := make([]byte, codec.DecodedLen(len(data)))
+	n, err := codec.Decode(buf, data)
 	if err == nil {
 		return buf[0:n], nil
 	}

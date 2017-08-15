@@ -65,7 +65,7 @@ func (m *Macaroon) initJSONV1(mjson *macaroonJSONV1) error {
 	copy(m.sig[:], sig)
 	m.caveats = m.caveats[:0]
 	for _, cav := range mjson.Caveats {
-		vid, err := base64Decode([]byte(cav.VID))
+		vid, err := Base64Decode([]byte(cav.VID))
 		if err != nil {
 			return fmt.Errorf("cannot decode verification id %q: %v", cav.VID, err)
 		}

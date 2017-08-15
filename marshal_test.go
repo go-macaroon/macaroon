@@ -157,3 +157,47 @@ func (*marshalSuite) testSliceRoundTripWithVersion(c *gc.C, vers macaroon.Versio
 
 	c.Assert(b, jc.DeepEquals, marshaledMacs)
 }
+
+var base64DecodeTests = []struct {
+	about       string
+	input       string
+	expect      string
+	expectError string
+}{{
+	about:  "empty string",
+	input:  "",
+	expect: "",
+}, {
+	about:  "standard encoding, padded",
+	input:  "Z29+IQ==",
+	expect: "go~!",
+}, {
+	about:  "URL encoding, padded",
+	input:  "Z29-IQ==",
+	expect: "go~!",
+}, {
+	about:  "standard encoding, not padded",
+	input:  "Z29+IQ",
+	expect: "go~!",
+}, {
+	about:  "URL encoding, not padded",
+	input:  "Z29-IQ",
+	expect: "go~!",
+}, {
+	about:       "standard encoding, too much padding",
+	input:       "Z29+IQ===",
+	expectError: `illegal base64 data at input byte 8`,
+}}
+
+func (*marshalSuite) TestBase64Decode(c *gc.C) {
+	for i, test := range base64DecodeTests {
+		c.Logf("test %d: %s", i, test.about)
+		out, err := macaroon.Base64Decode([]byte(test.input))
+		if test.expectError != "" {
+			c.Assert(err, gc.ErrorMatches, test.expectError)
+		} else {
+			c.Assert(err, gc.Equals, nil)
+			c.Assert(string(out), gc.Equals, test.expect)
+		}
+	}
+}

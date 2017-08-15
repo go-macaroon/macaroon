@@ -110,7 +110,7 @@ func jsonBinaryField(s, shex, sb64 string) ([]byte, error) {
 		}
 		return hex.DecodeString(shex)
 	case sb64 != "":
-		return base64Decode([]byte(sb64))
+		return Base64Decode([]byte(sb64))
 	}
 	return []byte{}, nil
 }
