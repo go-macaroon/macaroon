@@ -2,7 +2,6 @@ package macaroon
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"unicode/utf8"
@@ -10,23 +9,19 @@ import (
 
 // macaroonJSONV2 defines the V2 JSON format for macaroons.
 type macaroonJSONV2 struct {
-	Caveats       []caveatJSONV2 `json:"c,omitempty"`
-	Location      string         `json:"l,omitempty"`
-	Identifier    string         `json:"i,omitempty"`
-	IdentifierHex string         `json:"iH,omitempty"`
-	Identifier64  string         `json:"i64,omitempty"`
-	Signature     string         `json:"s,omitempty"`
-	SignatureHex  string         `json:"sH,omitempty"`
-	Signature64   string         `json:"s64,omitempty"`
+	Caveats      []caveatJSONV2 `json:"c,omitempty"`
+	Location     string         `json:"l,omitempty"`
+	Identifier   string         `json:"i,omitempty"`
+	Identifier64 string         `json:"i64,omitempty"`
+	Signature    string         `json:"s,omitempty"`
+	Signature64  string         `json:"s64,omitempty"`
 }
 
 // caveatJSONV2 defines the V2 JSON format for caveats within a macaroon.
 type caveatJSONV2 struct {
 	CID      string `json:"i,omitempty"`
-	CIDHex   string `json:"iH,omitempty"`
 	CID64    string `json:"i64,omitempty"`
 	VID      string `json:"v,omitempty"`
-	VIDHex   string `json:"vH,omitempty"`
 	VID64    string `json:"v64,omitempty"`
 	Location string `json:"l,omitempty"`
 }
@@ -36,14 +31,14 @@ func (m *Macaroon) marshalJSONV2() ([]byte, error) {
 		Location: m.location,
 		Caveats:  make([]caveatJSONV2, len(m.caveats)),
 	}
-	putJSONBinaryField(m.id, &mjson.Identifier, &mjson.IdentifierHex, &mjson.Identifier64)
-	putJSONBinaryField(m.sig[:], &mjson.Signature, &mjson.SignatureHex, &mjson.Signature64)
+	putJSONBinaryField(m.id, &mjson.Identifier, &mjson.Identifier64)
+	putJSONBinaryField(m.sig[:], &mjson.Signature, &mjson.Signature64)
 	for i, cav := range m.caveats {
 		cavjson := caveatJSONV2{
 			Location: cav.Location,
 		}
-		putJSONBinaryField(cav.Id, &cavjson.CID, &cavjson.CIDHex, &cavjson.CID64)
-		putJSONBinaryField(cav.VerificationId, &cavjson.VID, &cavjson.VIDHex, &cavjson.VID64)
+		putJSONBinaryField(cav.Id, &cavjson.CID, &cavjson.CID64)
+		putJSONBinaryField(cav.VerificationId, &cavjson.VID, &cavjson.VID64)
 		mjson.Caveats[i] = cavjson
 	}
 	data, err := json.Marshal(mjson)
@@ -56,12 +51,12 @@ func (m *Macaroon) marshalJSONV2() ([]byte, error) {
 // initJSONV2 initializes m from the JSON-unmarshaled data
 // held in mjson.
 func (m *Macaroon) initJSONV2(mjson *macaroonJSONV2) error {
-	id, err := jsonBinaryField(mjson.Identifier, mjson.IdentifierHex, mjson.Identifier64)
+	id, err := jsonBinaryField(mjson.Identifier, mjson.Identifier64)
 	if err != nil {
 		return fmt.Errorf("invalid identifier: %v", err)
 	}
 	m.init(id, mjson.Location, V2)
-	sig, err := jsonBinaryField(mjson.Signature, mjson.SignatureHex, mjson.Signature64)
+	sig, err := jsonBinaryField(mjson.Signature, mjson.Signature64)
 	if err != nil {
 		return fmt.Errorf("invalid signature: %v", err)
 	}
@@ -71,11 +66,11 @@ func (m *Macaroon) initJSONV2(mjson *macaroonJSONV2) error {
 	copy(m.sig[:], sig)
 	m.caveats = make([]Caveat, 0, len(mjson.Caveats))
 	for _, cav := range mjson.Caveats {
-		cid, err := jsonBinaryField(cav.CID, cav.CIDHex, cav.CID64)
+		cid, err := jsonBinaryField(cav.CID, cav.CID64)
 		if err != nil {
 			return fmt.Errorf("invalid cid in caveat: %v", err)
 		}
-		vid, err := jsonBinaryField(cav.VID, cav.VIDHex, cav.VID64)
+		vid, err := jsonBinaryField(cav.VID, cav.VID64)
 		if err != nil {
 			return fmt.Errorf("invalid vid in caveat: %v", err)
 		}
@@ -86,29 +81,37 @@ func (m *Macaroon) initJSONV2(mjson *macaroonJSONV2) error {
 
 // putJSONBinaryField puts the value of x into one
 // of the appropriate fields depending on its value.
-func putJSONBinaryField(x []byte, s, shex, sb64 *string) {
-	if utf8.Valid(x) {
-		*s = string(x)
+func putJSONBinaryField(x []byte, s, sb64 *string) {
+	if !utf8.Valid(x) {
+		*sb64 = base64.RawURLEncoding.EncodeToString(x)
 		return
 	}
-	// TODO use hex encoding when the field is small?
+	// We could use either string or base64 encoding;
+	// choose the most compact of the two possibilities.
+	b64len := base64.RawURLEncoding.EncodedLen(len(x))
+	sx := string(x)
+	if jsonEnc, _ := json.Marshal(sx); len(jsonEnc)-2 <= b64len+2 {
+		// The JSON encoding is smaller than the base 64 encoding.
+		// NB marshaling a string can never return an error;
+		// it always includes the two quote characters;
+		// but using base64 also uses two extra characters for the
+		// "64" suffix on the field name. If all is equal, prefer string
+		// encoding because it's more readable.
+		*s = sx
+		return
+	}
 	*sb64 = base64.RawURLEncoding.EncodeToString(x)
 }
 
 // jsonBinaryField returns the value of a JSON field that may
 // be string, hex or base64-encoded.
-func jsonBinaryField(s, shex, sb64 string) ([]byte, error) {
+func jsonBinaryField(s, sb64 string) ([]byte, error) {
 	switch {
 	case s != "":
-		if shex != "" || sb64 != "" {
-			return nil, fmt.Errorf("ambiguous field encoding")
-		}
-		return []byte(s), nil
-	case shex != "":
 		if sb64 != "" {
 			return nil, fmt.Errorf("ambiguous field encoding")
 		}
-		return hex.DecodeString(shex)
+		return []byte(s), nil
 	case sb64 != "":
 		return Base64Decode([]byte(sb64))
 	}
