@@ -576,10 +576,6 @@ var jsonRoundTripTests = []struct {
 	expectVers:           macaroon.V1,
 	expectExactRoundTrip: true,
 }, {
-	about:      "V2 object with hex binary values",
-	data:       `{"c":[{"i":"account = 3735928559"},{"i":"this was how we remind auth of key/pred","vH":"000000000000000000000000000000000000000000000000d36ec502e05886d1f0279f055fa52554d16d16c1b14074bbb83ff0fdd79dc2fe098f0ed4a2b091130e6b5db46a20a86b","l":"http://auth.mybank/"}],"l":"http://mybank/","iH":"77652075736564206f7572206f7468657220736563726574206b6579","sH":"d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
-	expectVers: macaroon.V2,
-}, {
 	about:      "V2 object with std base-64 binary values",
 	data:       `{"c":[{"i64":"YWNjb3VudCA9IDM3MzU5Mjg1NTk="},{"i64":"dGhpcyB3YXMgaG93IHdlIHJlbWluZCBhdXRoIG9mIGtleS9wcmVk","v64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA027FAuBYhtHwJ58FX6UlVNFtFsGxQHS7uD/w/dedwv4Jjw7UorCREw5rXbRqIKhr","l":"http://auth.mybank/"}],"l":"http://mybank/","i64":"d2UgdXNlZCBvdXIgb3RoZXIgc2VjcmV0IGtleQ==","s64":"0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9Vw="}`,
 	expectVers: macaroon.V2,
@@ -675,35 +671,27 @@ var jsonDecodeErrorTests = []struct {
 	expectError string
 }{{
 	about:       "ambiguous id #1",
-	data:        `{"i": "hello", "i64": "abcd", "s": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
-	expectError: "invalid identifier: ambiguous field encoding",
-}, {
-	about:       "ambiguous id #2",
-	data:        `{"iH": "0000", "i64": "abcd", "s": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
-	expectError: "invalid identifier: ambiguous field encoding",
-}, {
-	about:       "ambiguous id #3",
-	data:        `{"i": "hello", "iH": "a65b", "s": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	data:        `{"i": "hello", "i64": "abcd", "s64": "ZDI3ZGIyZmQxZjIyNzYwZTRjM2RhZTgxMzdlMmQ4ZmMK"}`,
 	expectError: "invalid identifier: ambiguous field encoding",
 }, {
 	about:       "ambiguous signature",
-	data:        `{"i": "hello", "sH": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c", "s64": "543467"}`,
+	data:        `{"i": "hello", "s": "345", "s64": "543467"}`,
 	expectError: "invalid signature: ambiguous field encoding",
 }, {
 	about:       "signature too short",
-	data:        `{"i": "hello", "sH": "7db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	data:        `{"i": "hello", "s64": "0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9Q"}`,
 	expectError: "signature has unexpected length 31",
 }, {
 	about:       "signature too long",
-	data:        `{"i": "hello", "sH": "00d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c"}`,
+	data:        `{"i": "hello", "s64": "0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9dP1"}`,
 	expectError: "signature has unexpected length 33",
 }, {
 	about:       "invalid caveat id",
-	data:        `{"i": "hello", "sH": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c", "c": [{"i": "hello", "iH": "00"}]}`,
+	data:        `{"i": "hello", "s64": "0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9Vw", "c": [{"i": "hello", "i64": "00"}]}`,
 	expectError: "invalid cid in caveat: ambiguous field encoding",
 }, {
 	about:       "invalid caveat vid",
-	data:        `{"i": "hello", "sH": "d27db2fd1f22760e4c3dae8137e2d8fc1df6c0741c18aed4b97256bf78d1f55c", "c": [{"i": "hello", "v": "hello", "vH": "00"}]}`,
+	data:        `{"i": "hello", "s64": "0n2y/R8idg5MPa6BN+LY/B32wHQcGK7UuXJWv3jR9Vw", "c": [{"i": "hello", "v": "hello", "v64": "00"}]}`,
 	expectError: "invalid vid in caveat: ambiguous field encoding",
 }}
 
@@ -816,4 +804,42 @@ func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
 	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
 	err := m0.AddFirstPartyCaveat(badString)
 	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
+}
+
+var binaryFieldBase64ChoiceTests = []struct {
+	id           string
+	expectBase64 bool
+}{
+	{"x", false},
+	{"\x00", true},
+	{"\x03\x00", true},
+	{"a longer id with more stuff", false},
+	{"a longer id with more stuff and one invalid \xff", true},
+	{"a longer id with more stuff and one encoded \x00", false},
+}
+
+func (*macaroonSuite) TestBinaryFieldBase64Choice(c *gc.C) {
+	for i, test := range binaryFieldBase64ChoiceTests {
+		c.Logf("test %d: %q", i, test.id)
+		m := MustNew([]byte{0}, []byte(test.id), "", macaroon.LatestVersion)
+		data, err := json.Marshal(m)
+		c.Assert(err, gc.Equals, nil)
+		var x struct {
+			Id   *string `json:"i"`
+			Id64 *string `json:"i64"`
+		}
+		err = json.Unmarshal(data, &x)
+		c.Assert(err, gc.Equals, nil)
+		if test.expectBase64 {
+			c.Assert(x.Id64, gc.NotNil)
+			c.Assert(x.Id, gc.IsNil)
+			idDec, err := base64.RawURLEncoding.DecodeString(*x.Id64)
+			c.Assert(err, gc.Equals, nil)
+			c.Assert(string(idDec), gc.Equals, test.id)
+		} else {
+			c.Assert(x.Id64, gc.IsNil)
+			c.Assert(x.Id, gc.NotNil)
+			c.Assert(*x.Id, gc.Equals, test.id)
+		}
+	}
 }
