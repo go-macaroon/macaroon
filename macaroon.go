@@ -135,14 +135,15 @@ func (m *Macaroon) addCaveat(caveatId, verificationId []byte, loc string) error 
 		// TODO check caveat length too.
 	}
 	m.appendCaveat(caveatId, verificationId, loc)
-	m.sig = *keyedHash2(&m.sig, verificationId, caveatId)
+	if len(verificationId) == 0 {
+		m.sig = *keyedHash(&m.sig, caveatId)
+	} else {
+		m.sig = *keyedHash2(&m.sig, verificationId, caveatId)
+	}
 	return nil
 }
 
 func keyedHash2(key *[keyLen]byte, d1, d2 []byte) *[hashLen]byte {
-	if len(d1) == 0 {
-		return keyedHash(key, d2)
-	}
 	var data [hashLen * 2]byte
 	copy(data[0:], keyedHash(key, d1)[:])
 	copy(data[hashLen:], keyedHash(key, d2)[:])
@@ -210,26 +211,9 @@ func bindForRequest(rootSig []byte, dischargeSig *[hashLen]byte) *[hashLen]byte 
 //
 // Verify returns nil if the verification succeeds.
 func (m *Macaroon) Verify(rootKey []byte, check func(caveat string) error, discharges []*Macaroon) error {
-	derivedKey := makeKey(rootKey)
-	// TODO(rog) consider distinguishing between classes of
-	// check error - some errors may be resolved by minting
-	// a new macaroon; others may not.
-	used := make([]int, len(discharges))
-	if err := m.verify(&m.sig, derivedKey, check, discharges, used); err != nil {
-		return err
-	}
-	for i, dm := range discharges {
-		switch used[i] {
-		case 0:
-			return fmt.Errorf("discharge macaroon %q was not used", dm.Id())
-		case 1:
-			continue
-		default:
-			// Should be impossible because of check in verify, but be defensive.
-			return fmt.Errorf("discharge macaroon %q was used more than once", dm.Id())
-		}
-	}
-	return nil
+	var vctx verificationContext
+	vctx.init(rootKey, m, discharges, check)
+	return vctx.verify(m, rootKey)
 }
 
 // VerifySignature verifies the signature of the given macaroon with respect
@@ -244,17 +228,69 @@ func (m *Macaroon) VerifySignature(rootKey []byte, discharges []*Macaroon) ([]st
 		n += len(dm.caveats)
 	}
 	conds := make([]string, 0, n)
-	err := m.Verify(rootKey, func(cond string) error {
+	var vctx verificationContext
+	vctx.init(rootKey, m, discharges, func(cond string) error {
 		conds = append(conds, cond)
 		return nil
-	}, discharges)
+	})
+	err := vctx.verify(m, rootKey)
 	if err != nil {
 		return nil, err
 	}
 	return conds, nil
 }
 
-func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check func(caveat string) error, discharges []*Macaroon, used []int) error {
+// TraceVerify verifies the signature of the macaroon without checking
+// any of the first party caveats, and returns a slice of Traces holding
+// the operations used when verifying the macaroons.
+//
+// Each element in the returned slice corresponds to the
+// operation for one of the argument macaroons, with m at index 0,
+// and discharges at 1 onwards.
+func (m *Macaroon) TraceVerify(rootKey []byte, discharges []*Macaroon) ([]Trace, error) {
+	var vctx verificationContext
+	vctx.init(rootKey, m, discharges, func(string) error { return nil })
+	vctx.traces = make([]Trace, len(discharges)+1)
+	err := vctx.verify(m, rootKey)
+	return vctx.traces, err
+}
+
+type verificationContext struct {
+	used       []bool
+	discharges []*Macaroon
+	rootSig    *[hashLen]byte
+	traces     []Trace
+	check      func(caveat string) error
+}
+
+func (vctx *verificationContext) init(rootKey []byte, root *Macaroon, discharges []*Macaroon, check func(caveat string) error) {
+	*vctx = verificationContext{
+		discharges: discharges,
+		used:       make([]bool, len(discharges)),
+		rootSig:    &root.sig,
+		check:      check,
+	}
+}
+
+func (vctx *verificationContext) verify(root *Macaroon, rootKey []byte) error {
+	vctx.traceRootKey(0, rootKey)
+	vctx.trace(0, TraceMakeKey, rootKey, nil)
+	derivedKey := makeKey(rootKey)
+	if err := vctx.verify0(root, 0, derivedKey); err != nil {
+		vctx.trace(0, TraceFail, nil, nil)
+		return err
+	}
+	for i, wasUsed := range vctx.used {
+		if !wasUsed {
+			vctx.trace(i+1, TraceFail, nil, nil)
+			return fmt.Errorf("discharge macaroon %q was not used", vctx.discharges[i].Id())
+		}
+	}
+	return nil
+}
+
+func (vctx *verificationContext) verify0(m *Macaroon, index int, rootKey *[hashLen]byte) error {
+	vctx.trace(index, TraceHash, m.id, nil)
 	caveatSig := keyedHash(rootKey, m.id)
 	for i, cav := range m.caveats {
 		if cav.isThirdParty() {
@@ -262,46 +298,66 @@ func (m *Macaroon) verify(rootSig *[hashLen]byte, rootKey *[hashLen]byte, check 
 			if err != nil {
 				return fmt.Errorf("failed to decrypt caveat %d signature: %v", i, err)
 			}
-			// We choose an arbitrary error from one of the
-			// possible discharge macaroon verifications
-			// if there's more than one discharge macaroon
-			// with the required id.
-			found := false
-			for di, dm := range discharges {
-				if !bytes.Equal(dm.id, cav.Id) {
-					continue
-				}
-				found = true
-
-				// It's important that we do this before calling verify,
-				// as it prevents potentially infinite recursion.
-				if used[di]++; used[di] > 1 {
-					return fmt.Errorf("discharge macaroon %q was used more than once", dm.Id())
-				}
-				if err := dm.verify(rootSig, cavKey, check, discharges, used); err != nil {
-					return err
-				}
-				break
+			dm, di, err := vctx.findDischarge(cav.Id)
+			if err != nil {
+				return err
 			}
-			if !found {
-				return fmt.Errorf("cannot find discharge macaroon for caveat %x", cav.Id)
+			vctx.traceRootKey(di+1, cavKey[:])
+			if err := vctx.verify0(dm, di+1, cavKey); err != nil {
+				vctx.trace(di+1, TraceFail, nil, nil)
+				return err
 			}
+			vctx.trace(index, TraceHash, cav.VerificationId, cav.Id)
+			caveatSig = keyedHash2(caveatSig, cav.VerificationId, cav.Id)
 		} else {
-			if err := check(string(cav.Id)); err != nil {
+			vctx.trace(index, TraceHash, cav.Id, nil)
+			caveatSig = keyedHash(caveatSig, cav.Id)
+			if err := vctx.check(string(cav.Id)); err != nil {
 				return err
 			}
 		}
-		caveatSig = keyedHash2(caveatSig, cav.VerificationId, cav.Id)
+	}
+	if index > 0 {
+		vctx.trace(index, TraceBind, vctx.rootSig[:], caveatSig[:])
+		caveatSig = bindForRequest(vctx.rootSig[:], caveatSig)
 	}
 	// TODO perhaps we should actually do this check before doing
 	// all the potentially expensive caveat checks.
-	boundSig := bindForRequest(rootSig[:], caveatSig)
-	if !hmac.Equal(boundSig[:], m.sig[:]) {
+	if !hmac.Equal(caveatSig[:], m.sig[:]) {
 		return fmt.Errorf("signature mismatch after caveat verification")
 	}
 	return nil
 }
 
-type Verifier interface {
-	Verify(m *Macaroon, rootKey []byte) (bool, error)
+func (vctx *verificationContext) findDischarge(id []byte) (dm *Macaroon, index int, err error) {
+	for di, dm := range vctx.discharges {
+		if !bytes.Equal(dm.id, id) {
+			continue
+		}
+		// Don't use a discharge macaroon more than once.
+		// It's important that we do this check here rather than after
+		// verify as it prevents potentially infinite recursion.
+		if vctx.used[di] {
+			return nil, 0, fmt.Errorf("discharge macaroon %q was used more than once", dm.Id())
+		}
+		vctx.used[di] = true
+		return dm, di, nil
+	}
+	return nil, 0, fmt.Errorf("cannot find discharge macaroon for caveat %x", id)
+}
+
+func (vctx *verificationContext) trace(index int, op TraceOpKind, data1, data2 []byte) {
+	if vctx.traces != nil {
+		vctx.traces[index].Ops = append(vctx.traces[index].Ops, TraceOp{
+			Kind:  op,
+			Data1: data1,
+			Data2: data2,
+		})
+	}
+}
+
+func (vctx *verificationContext) traceRootKey(index int, rootKey []byte) {
+	if vctx.traces != nil {
+		vctx.traces[index].RootKey = rootKey[:]
+	}
 }
