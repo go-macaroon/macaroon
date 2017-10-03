@@ -93,6 +93,14 @@ func (*macaroonSuite) TestThirdPartyCaveatBadRandom(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, "cannot generate random bytes: fail")
 }
 
+func (*macaroonSuite) TestSetLocation(c *gc.C) {
+	rootKey := []byte("secret")
+	m := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
+	c.Assert(m.Location(), gc.Equals, "a location")
+	m.SetLocation("another location")
+	c.Assert(m.Location(), gc.Equals, "another location")
+}
+
 type conditionTest struct {
 	conditions map[string]bool
 	expectErr  string

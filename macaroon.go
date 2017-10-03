@@ -81,6 +81,13 @@ func (m *Macaroon) init(id []byte, loc string, vers Version) {
 	m.version = vers
 }
 
+// SetLocation sets the location associated with the macaroon.
+// Note that the location is not included in the macaroon's
+// hash chain, so this does not change the signature.
+func (m *Macaroon) SetLocation(loc string) {
+	m.location = loc
+}
+
 // Clone returns a copy of the receiving macaroon.
 func (m *Macaroon) Clone() *Macaroon {
 	m1 := *m
