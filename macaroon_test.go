@@ -46,7 +46,7 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 	tested := make(map[string]bool)
 
 	for cav := range caveats {
-		m.AddFirstPartyCaveat(cav)
+		m.AddFirstPartyCaveat([]byte(cav))
 	}
 	expectErr := fmt.Errorf("condition not met")
 	check := func(cav string) error {
@@ -61,7 +61,7 @@ func (*macaroonSuite) TestFirstPartyCaveat(c *gc.C) {
 
 	c.Assert(tested, gc.DeepEquals, caveats)
 
-	m.AddFirstPartyCaveat("not met")
+	m.AddFirstPartyCaveat([]byte("not met"))
 	err = m.Verify(rootKey, check, nil)
 	c.Assert(err, gc.Equals, expectErr)
 
@@ -543,7 +543,7 @@ func (s *macaroonSuite) TestMarshalJSON(c *gc.C) {
 func (*macaroonSuite) testMarshalJSONWithVersion(c *gc.C, vers macaroon.Version) {
 	rootKey := []byte("secret")
 	m0 := MustNew(rootKey, []byte("some id"), "a location", vers)
-	m0.AddFirstPartyCaveat("account = 3735928559")
+	m0.AddFirstPartyCaveat([]byte("account = 3735928559"))
 	m0JSON, err := json.Marshal(m0)
 	c.Assert(err, gc.IsNil)
 	var m1 macaroon.Macaroon
@@ -753,7 +753,7 @@ func makeMacaroon(mspec macaroonSpec) *macaroon.Macaroon {
 				panic(err)
 			}
 		} else {
-			m.AddFirstPartyCaveat(cav.condition)
+			m.AddFirstPartyCaveat([]byte(cav.condition))
 		}
 	}
 	return m
@@ -776,9 +776,9 @@ func (*macaroonSuite) TestBinaryRoundTrip(c *gc.C) {
 	// first and third party caveats.
 	rootKey := []byte("secret")
 	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
-	err := m0.AddFirstPartyCaveat("first caveat")
+	err := m0.AddFirstPartyCaveat([]byte("first caveat"))
 	c.Assert(err, gc.IsNil)
-	err = m0.AddFirstPartyCaveat("second caveat")
+	err = m0.AddFirstPartyCaveat([]byte("second caveat"))
 	c.Assert(err, gc.IsNil)
 	err = m0.AddThirdPartyCaveat([]byte("shared root key"), []byte("3rd party caveat"), "remote.com")
 	c.Assert(err, gc.IsNil)
@@ -805,13 +805,13 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	assertEqualMacaroons(c, &m0, &m1)
 }
 
-func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
+func (*macaroonSuite) TestInvalidV1MacaroonFields(c *gc.C) {
 	rootKey := []byte("secret")
 	badString := "foo\xff"
 
-	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
-	err := m0.AddFirstPartyCaveat(badString)
-	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
+	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.V1)
+	err := m0.AddFirstPartyCaveat([]byte(badString))
+	c.Assert(err, gc.ErrorMatches, "invalid caveat id for v1 macaroon")
 }
 
 var binaryFieldBase64ChoiceTests = []struct {
