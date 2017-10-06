@@ -55,7 +55,7 @@ func benchmarkVerify(b *testing.B, mspecs []macaroonSpec) {
 }
 
 func BenchmarkVerifyLarge(b *testing.B) {
-	benchmarkVerify(b, recursiveThirdPartyCaveatMacaroons)
+	benchmarkVerify(b, multilevelThirdPartyCaveatMacaroons)
 }
 
 func BenchmarkVerifySmall(b *testing.B) {

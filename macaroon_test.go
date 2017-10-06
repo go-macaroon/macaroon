@@ -371,8 +371,8 @@ var verifyTests = []struct {
 		expectErr: fmt.Sprintf(`cannot find discharge macaroon for caveat %x`, "barbara-is-great"),
 	}},
 }, {
-	about:     "recursive third party caveats",
-	macaroons: recursiveThirdPartyCaveatMacaroons,
+	about:     "multilevel third party caveats",
+	macaroons: multilevelThirdPartyCaveatMacaroons,
 	conditions: []conditionTest{{
 		conditions: map[string]bool{
 			"wonderful":   true,
@@ -403,7 +403,7 @@ var verifyTests = []struct {
 	}},
 }}
 
-var recursiveThirdPartyCaveatMacaroons = []macaroonSpec{{
+var multilevelThirdPartyCaveatMacaroons = []macaroonSpec{{
 	rootKey: "root-key",
 	id:      "root-id",
 	caveats: []caveat{{
@@ -491,6 +491,67 @@ func (*macaroonSuite) TestVerify(c *gc.C) {
 			c.Assert(cloneErr, gc.DeepEquals, err)
 		}
 	}
+}
+
+func (*macaroonSuite) TestTraceVerify(c *gc.C) {
+	rootKey, macaroons := makeMacaroons(multilevelThirdPartyCaveatMacaroons)
+	traces, err := macaroons[0].TraceVerify(rootKey, macaroons[1:])
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(traces, gc.HasLen, len(macaroons))
+	// Check that we can run through the resulting operations and
+	// arrive at the same signature.
+	for i, m := range macaroons {
+		r := traces[i].Results()
+		c.Assert(b64str(r[len(r)-1]), gc.Equals, b64str(m.Signature()), gc.Commentf("macaroon %d", i))
+	}
+}
+
+func (*macaroonSuite) TestTraceVerifyFailure(c *gc.C) {
+	rootKey, macaroons := makeMacaroons([]macaroonSpec{{
+		rootKey: "xxx",
+		id:      "hello",
+		caveats: []caveat{{
+			condition: "cond1",
+		}, {
+			condition: "cond2",
+		}, {
+			condition: "cond3",
+		}},
+	}})
+	// Marshal the macaroon, corrupt a condition, then unmarshal
+	// it and check we see the expected trace failure.
+	data, err := json.Marshal(macaroons[0])
+	c.Assert(err, gc.Equals, nil)
+	var jm macaroon.MacaroonJSONV2
+	err = json.Unmarshal(data, &jm)
+	c.Assert(err, gc.Equals, nil)
+	jm.Caveats[1].CID = "cond2 corrupted"
+	data, err = json.Marshal(jm)
+	c.Assert(err, gc.Equals, nil)
+
+	var corruptm *macaroon.Macaroon
+	err = json.Unmarshal(data, &corruptm)
+	c.Assert(err, gc.Equals, nil)
+
+	traces, err := corruptm.TraceVerify(rootKey, nil)
+	c.Assert(err, gc.ErrorMatches, `signature mismatch after caveat verification`)
+	c.Assert(traces, gc.HasLen, 1)
+	var kinds []macaroon.TraceOpKind
+	for _, op := range traces[0].Ops {
+		kinds = append(kinds, op.Kind)
+	}
+	c.Assert(kinds, gc.DeepEquals, []macaroon.TraceOpKind{
+		macaroon.TraceMakeKey,
+		macaroon.TraceHash, // id
+		macaroon.TraceHash, // cond1
+		macaroon.TraceHash, // cond2
+		macaroon.TraceHash, // cond3
+		macaroon.TraceFail, // sig mismatch
+	})
+}
+
+func b64str(b []byte) string {
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 func (*macaroonSuite) TestVerifySignature(c *gc.C) {
@@ -712,6 +773,15 @@ func (*macaroonSuite) TestJSONDecodeError(c *gc.C) {
 	}
 }
 
+func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
+	rootKey := []byte("secret")
+	badString := "foo\xff"
+
+	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
+	err := m0.AddFirstPartyCaveat(badString)
+	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
+}
+
 func decodeB64(s string) []byte {
 	data, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
@@ -803,15 +873,6 @@ func (*macaroonSuite) TestBinaryMarshalingAgainstLibmacaroon(c *gc.C) {
 	err = m1.UnmarshalJSON(jsonData)
 	c.Assert(err, gc.IsNil)
 	assertEqualMacaroons(c, &m0, &m1)
-}
-
-func (*macaroonSuite) TestInvalidMacaroonFields(c *gc.C) {
-	rootKey := []byte("secret")
-	badString := "foo\xff"
-
-	m0 := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
-	err := m0.AddFirstPartyCaveat(badString)
-	c.Assert(err, gc.ErrorMatches, `first party caveat condition is not a valid utf-8 string`)
 }
 
 var binaryFieldBase64ChoiceTests = []struct {
