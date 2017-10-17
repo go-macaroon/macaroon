@@ -4,7 +4,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
-	"gopkg.in/macaroon.v2-unstable"
+	"gopkg.in/macaroon.v2"
 )
 
 type marshalSuite struct{}
@@ -29,7 +29,7 @@ func (*marshalSuite) testMarshalUnmarshalWithVersion(c *gc.C, vers macaroon.Vers
 	err := m.AddThirdPartyCaveat([]byte("shared root key"), []byte("3rd party caveat"), "remote.com")
 	c.Assert(err, gc.IsNil)
 
-	err = m.AddFirstPartyCaveat("a caveat")
+	err = m.AddFirstPartyCaveat([]byte("a caveat"))
 	c.Assert(err, gc.IsNil)
 
 	b, err := m.MarshalBinary()
@@ -88,9 +88,9 @@ func (*marshalSuite) testMarshalUnmarshalSliceWithVersion(c *gc.C, vers macaroon
 	m1 := MustNew(rootKey, []byte("some id"), "a location", vers)
 	m2 := MustNew(rootKey, []byte("some other id"), "another location", vers)
 
-	err := m1.AddFirstPartyCaveat("a caveat")
+	err := m1.AddFirstPartyCaveat([]byte("a caveat"))
 	c.Assert(err, gc.IsNil)
-	err = m2.AddFirstPartyCaveat("another caveat")
+	err = m2.AddFirstPartyCaveat([]byte("another caveat"))
 	c.Assert(err, gc.IsNil)
 
 	macaroons := macaroon.Slice{m1, m2}
@@ -117,7 +117,7 @@ func (*marshalSuite) testMarshalUnmarshalSliceWithVersion(c *gc.C, vers macaroon
 	// Check that appending a caveat to the first does not
 	// affect the second.
 	for i := 0; i < 10; i++ {
-		err = unmarshaledMacs[0].AddFirstPartyCaveat("caveat")
+		err = unmarshaledMacs[0].AddFirstPartyCaveat([]byte("caveat"))
 		c.Assert(err, gc.IsNil)
 	}
 	unmarshaledMacs[1].SetVersion(macaroons[1].Version())
@@ -138,9 +138,9 @@ func (*marshalSuite) testSliceRoundTripWithVersion(c *gc.C, vers macaroon.Versio
 	m1 := MustNew(rootKey, []byte("some id"), "a location", vers)
 	m2 := MustNew(rootKey, []byte("some other id"), "another location", vers)
 
-	err := m1.AddFirstPartyCaveat("a caveat")
+	err := m1.AddFirstPartyCaveat([]byte("a caveat"))
 	c.Assert(err, gc.IsNil)
-	err = m2.AddFirstPartyCaveat("another caveat")
+	err = m2.AddFirstPartyCaveat([]byte("another caveat"))
 	c.Assert(err, gc.IsNil)
 
 	macaroons := macaroon.Slice{m1, m2}

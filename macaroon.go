@@ -165,13 +165,9 @@ func (m *Macaroon) Bind(sig []byte) {
 }
 
 // AddFirstPartyCaveat adds a caveat that will be verified
-// by the target service. The caveat id must be a UTF-8 encoded
-// string.
-func (m *Macaroon) AddFirstPartyCaveat(condition string) error {
-	if !utf8.ValidString(condition) {
-		return fmt.Errorf("first party caveat condition is not a valid utf-8 string")
-	}
-	m.addCaveat([]byte(condition), nil, "")
+// by the target service.
+func (m *Macaroon) AddFirstPartyCaveat(condition []byte) error {
+	m.addCaveat(condition, nil, "")
 	return nil
 }
 
