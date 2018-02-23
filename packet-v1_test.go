@@ -3,29 +3,28 @@ package macaroon
 import (
 	"strconv"
 	"strings"
+	"testing"
 	"unicode"
 
-	gc "gopkg.in/check.v1"
+	qt "github.com/frankban/quicktest"
 )
 
-type packetV1Suite struct{}
-
-var _ = gc.Suite(&packetV1Suite{})
-
-func (*packetV1Suite) TestAppendPacket(c *gc.C) {
+func TestAppendPacket(t *testing.T) {
+	c := qt.New(t)
 	data, ok := appendPacketV1(nil, "field", []byte("some data"))
-	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(data), gc.Equals, "0014field some data\n")
+	c.Assert(ok, qt.Equals, true)
+	c.Assert(string(data), qt.Equals, "0014field some data\n")
 
 	data, ok = appendPacketV1(data, "otherfield", []byte("more and more data"))
-	c.Assert(ok, gc.Equals, true)
-	c.Assert(string(data), gc.Equals, "0014field some data\n0022otherfield more and more data\n")
+	c.Assert(ok, qt.Equals, true)
+	c.Assert(string(data), qt.Equals, "0014field some data\n0022otherfield more and more data\n")
 }
 
-func (*packetV1Suite) TestAppendPacketTooBig(c *gc.C) {
+func TestAppendPacketTooBig(t *testing.T) {
+	c := qt.New(t)
 	data, ok := appendPacketV1(nil, "field", make([]byte, 65532))
-	c.Assert(ok, gc.Equals, false)
-	c.Assert(data, gc.IsNil)
+	c.Assert(ok, qt.Equals, false)
+	c.Assert(data, qt.IsNil)
 }
 
 var parsePacketV1Tests = []struct {
@@ -62,17 +61,18 @@ var parsePacketV1Tests = []struct {
 	expectErr: "cannot parse size",
 }}
 
-func (*packetV1Suite) TestParsePacketV1(c *gc.C) {
+func TestParsePacketV1(t *testing.T) {
+	c := qt.New(t)
 	for i, test := range parsePacketV1Tests {
 		c.Logf("test %d: %q", i, truncate(test.data))
 		p, err := parsePacketV1([]byte(test.data))
 		if test.expectErr != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectErr)
-			c.Assert(p, gc.DeepEquals, packetV1{})
+			c.Assert(err, qt.ErrorMatches, test.expectErr)
+			c.Assert(p, packetEquals, packetV1{})
 			continue
 		}
-		c.Assert(err, gc.IsNil)
-		c.Assert(p, gc.DeepEquals, test.expect)
+		c.Assert(err, qt.Equals, nil)
+		c.Assert(p, packetEquals, test.expect)
 	}
 }
 
@@ -83,16 +83,17 @@ func truncate(d string) string {
 	return d
 }
 
-func (*packetV1Suite) TestAsciiHex(c *gc.C) {
+func TestAsciiHex(t *testing.T) {
+	c := qt.New(t)
 	for b := 0; b < 256; b++ {
 		n, err := strconv.ParseInt(string(b), 16, 8)
 		value, ok := asciiHex(byte(b))
 		if err != nil || unicode.IsUpper(rune(b)) {
-			c.Assert(ok, gc.Equals, false)
-			c.Assert(value, gc.Equals, 0)
+			c.Assert(ok, qt.Equals, false)
+			c.Assert(value, qt.Equals, 0)
 		} else {
-			c.Assert(ok, gc.Equals, true)
-			c.Assert(value, gc.Equals, int(n))
+			c.Assert(ok, qt.Equals, true)
+			c.Assert(value, qt.Equals, int(n))
 		}
 	}
 }
