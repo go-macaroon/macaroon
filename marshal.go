@@ -118,24 +118,26 @@ func (m *Macaroon) UnmarshalJSON(data []byte) error {
 	// Not a string; try to unmarshal into both kinds of macaroon object.
 	// This assumes that neither format has any fields in common.
 	// For subsequent versions we may need to change this approach.
+	type MacaroonJSONV1 macaroonJSONV1
+	type MacaroonJSONV2 macaroonJSONV2
 	var both struct {
-		*macaroonJSONV1
-		*macaroonJSONV2
+		*MacaroonJSONV1
+		*MacaroonJSONV2
 	}
 	if err := json.Unmarshal(data, &both); err != nil {
 		return err
 	}
 	switch {
-	case both.macaroonJSONV1 != nil && both.macaroonJSONV2 != nil:
+	case both.MacaroonJSONV1 != nil && both.MacaroonJSONV2 != nil:
 		return fmt.Errorf("cannot determine macaroon encoding version")
-	case both.macaroonJSONV1 != nil:
-		if err := m.initJSONV1(both.macaroonJSONV1); err != nil {
+	case both.MacaroonJSONV1 != nil:
+		if err := m.initJSONV1((*macaroonJSONV1)(both.MacaroonJSONV1)); err != nil {
 			return err
 		}
 		m.unmarshaledAs = MarshalV1 | MarshalJSON | MarshalJSONObject
 		return nil
-	case both.macaroonJSONV2 != nil:
-		if err := m.initJSONV2(both.macaroonJSONV2); err != nil {
+	case both.MacaroonJSONV2 != nil:
+		if err := m.initJSONV2((*macaroonJSONV2)(both.MacaroonJSONV2)); err != nil {
 			return err
 		}
 		m.unmarshaledAs = MarshalV2 | MarshalJSON | MarshalJSONObject
