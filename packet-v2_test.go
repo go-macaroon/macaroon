@@ -1,13 +1,13 @@
 package macaroon
 
 import (
-	jc "github.com/juju/testing/checkers"
-	gc "gopkg.in/check.v1"
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+	"github.com/google/go-cmp/cmp"
 )
 
-type packetV2Suite struct{}
-
-var _ = gc.Suite(&packetV2Suite{})
+var packetEquals = qt.CmpEquals(cmp.AllowUnexported(packetV1{}, packetV2{}))
 
 var parsePacketV2Tests = []struct {
 	about        string
@@ -54,17 +54,18 @@ var parsePacketV2Tests = []struct {
 	expectError: "varint value extends past end of buffer",
 }}
 
-func (*packetV2Suite) TestParsePacketV2(c *gc.C) {
+func TestParsePacketV2(t *testing.T) {
+	c := qt.New(t)
 	for i, test := range parsePacketV2Tests {
 		c.Logf("test %d: %v", i, test.about)
 		data, p, err := parsePacketV2([]byte(test.data))
 		if test.expectError != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectError)
-			c.Assert(data, gc.IsNil)
-			c.Assert(p, gc.DeepEquals, packetV2{})
+			c.Assert(err, qt.ErrorMatches, test.expectError)
+			c.Assert(data, qt.IsNil)
+			c.Assert(p, packetEquals, packetV2{})
 		} else {
-			c.Assert(err, gc.IsNil)
-			c.Assert(p, jc.DeepEquals, test.expectPacket)
+			c.Assert(err, qt.Equals, nil)
+			c.Assert(p, packetEquals, test.expectPacket)
 		}
 	}
 }
@@ -110,17 +111,18 @@ var parseSectionV2Tests = []struct {
 	expectError: "varint value extends past end of buffer",
 }}
 
-func (*packetV2Suite) TestParseSectionV2(c *gc.C) {
+func TestParseSectionV2(t *testing.T) {
+	c := qt.New(t)
 	for i, test := range parseSectionV2Tests {
 		c.Logf("test %d: %v", i, test.about)
 		data, ps, err := parseSectionV2([]byte(test.data))
 		if test.expectError != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectError)
-			c.Assert(data, gc.IsNil)
-			c.Assert(ps, gc.IsNil)
+			c.Assert(err, qt.ErrorMatches, test.expectError)
+			c.Assert(data, qt.IsNil)
+			c.Assert(ps, qt.IsNil)
 		} else {
-			c.Assert(err, gc.IsNil)
-			c.Assert(ps, jc.DeepEquals, test.expectPackets)
+			c.Assert(err, qt.Equals, nil)
+			c.Assert(ps, packetEquals, test.expectPackets)
 		}
 	}
 }

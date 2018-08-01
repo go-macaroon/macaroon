@@ -29,7 +29,27 @@ type Macaroon struct {
 	version  Version
 }
 
-// Caveat holds a first person or third party caveat.
+// Equal reports whether m has exactly the same content as m1.
+func (m *Macaroon) Equal(m1 *Macaroon) bool {
+	if m == m1 || m == nil || m1 == nil {
+		return m == m1
+	}
+	if m.location != m1.location ||
+		!bytes.Equal(m.id, m1.id) ||
+		m.sig != m1.sig ||
+		m.version != m1.version ||
+		len(m.caveats) != len(m1.caveats) {
+		return false
+	}
+	for i, c := range m.caveats {
+		if !c.Equal(m1.caveats[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// Caveat holds a first party or third party caveat.
 type Caveat struct {
 	// Id holds the id of the caveat. For first
 	// party caveats this holds the condition;
@@ -46,6 +66,13 @@ type Caveat struct {
 	// as part of the caveat, so should only
 	// be used as a hint.
 	Location string
+}
+
+// Equal reports whether c is equal to c1.
+func (c Caveat) Equal(c1 Caveat) bool {
+	return bytes.Equal(c.Id, c1.Id) &&
+		bytes.Equal(c.VerificationId, c1.VerificationId) &&
+		c.Location == c1.Location
 }
 
 // isThirdParty reports whether the caveat must be satisfied
