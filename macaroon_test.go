@@ -832,7 +832,7 @@ var jsonRoundTripTests = []struct {
 func TestJSONRoundTrip(t *testing.T) {
 	c := qt.New(t)
 	for _, test := range jsonRoundTripTests {
-		c.Run("v%v_%s", func(c *qt.C) {
+		c.Run(fmt.Sprintf("v%v_%s", test.expectVers, test.about), func(c *qt.C) {
 			testJSONRoundTripWithVersion(c, test.data, test.expectVers, test.expectExactRoundTrip)
 		})
 	}
