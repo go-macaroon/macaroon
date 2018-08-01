@@ -154,6 +154,12 @@ func (m *Macaroon) Caveats() []Caveat {
 
 // appendCaveat appends a caveat without modifying the macaroon's signature.
 func (m *Macaroon) appendCaveat(caveatId, verificationId []byte, loc string) {
+	if len(verificationId) == 0 {
+		// Ensure that an empty vid is always represented by nil,
+		// so that marshalers don't procuce spurious zero-length
+		// vid fields which can confuse some verifiers.
+		verificationId = nil
+	}
 	m.caveats = append(m.caveats, Caveat{
 		Id:             caveatId,
 		VerificationId: verificationId,

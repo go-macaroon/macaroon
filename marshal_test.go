@@ -1,6 +1,7 @@
 package macaroon_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -73,6 +74,39 @@ func TestMarshalBinaryRoundTrip(t *testing.T) {
 	data1, err := m.MarshalBinary()
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(data1, qt.DeepEquals, data)
+}
+
+func TestBinaryJSONRoundTripV1(t *testing.T) {
+	c := qt.New(t)
+	testBinaryJSONRoundTrip(c, macaroon.V1)
+}
+
+func TestBinaryJSONRoundTripV2(t *testing.T) {
+	c := qt.New(t)
+	testBinaryJSONRoundTrip(c, macaroon.V2)
+}
+
+func testBinaryJSONRoundTrip(c *qt.C, vers macaroon.Version) {
+	m1 := MustNew([]byte("rootkey"), []byte("some id"), "a location", vers)
+	err := m1.AddFirstPartyCaveat([]byte("a caveat"))
+	c.Assert(err, qt.Equals, nil)
+	err = m1.AddThirdPartyCaveat([]byte("shared root key"), []byte("3rd party caveat"), "remote.com")
+	c.Assert(err, qt.Equals, nil)
+
+	binData1, err := m1.MarshalBinary()
+	c.Assert(err, qt.Equals, nil)
+
+	jsonData1, err := json.Marshal(m1)
+	c.Assert(err, qt.Equals, nil)
+
+	var m2 *macaroon.Macaroon
+	err = json.Unmarshal(jsonData1, &m2)
+	c.Assert(err, qt.Equals, nil)
+
+	binData2, err := m2.MarshalBinary()
+	c.Assert(err, qt.Equals, nil)
+
+	c.Assert(binData1, qt.DeepEquals, binData2)
 }
 
 func TestMarshalUnmarshalSliceV1(t *testing.T) {
