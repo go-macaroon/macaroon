@@ -3,7 +3,7 @@
 // Decentralized Authorization in the Cloud"
 // (http://theory.stanford.edu/~ataly/Papers/macaroons.pdf)
 //
-// See the macaroon bakery packages at http://godoc.org/gopkg.in/macaroon-bakery.v1
+// See the macaroon bakery packages at http://godoc.org/gopkg.in/macaroon-bakery.v2
 // for higher level services and operations that use macaroons.
 package macaroon
 
