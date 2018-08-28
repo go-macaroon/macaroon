@@ -1,6 +1,8 @@
 # macaroon
---
-    import "gopkg.in/macaroon.v2"
+
+```go
+import "gopkg.in/macaroon.v2"
+````
 
 The macaroon package implements macaroons as described in the paper "Macaroons:
 Cookies with Contextual Caveats for Decentralized Authorization in the Cloud"
