@@ -110,7 +110,10 @@ func (m *Macaroon) UnmarshalBinary(data []byte) error {
 	// Copy the data to avoid retaining references to it
 	// in the internal data structures.
 	data = append([]byte(nil), data...)
-	_, err := m.parseBinary(data)
+	rest, err := m.parseBinary(data)
+	if len(rest) != 0 {
+		return fmt.Errorf("trailing binary data")
+	}
 	return err
 }
 
