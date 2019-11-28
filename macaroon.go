@@ -62,7 +62,7 @@ type Caveat struct {
 	VerificationId []byte
 
 	// For third-party caveats, Location holds the
-	// ocation hint. Note that this is not signature checked
+	// location hint. Note that this is not signature checked
 	// as part of the caveat, so should only
 	// be used as a hint.
 	Location string
