@@ -120,7 +120,7 @@ func (m *Macaroon) Clone() *Macaroon {
 	m1 := *m
 	// Ensure that if any caveats are appended to the new
 	// macaroon, it will copy the caveats.
-	m1.caveats = m1.caveats[0:len(m1.caveats):len(m1.caveats)]
+	m1.caveats = append([]Caveat{}, m1.caveats...)
 	return &m1
 }
 
