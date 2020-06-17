@@ -97,6 +97,36 @@ func TestSetLocation(t *testing.T) {
 	c.Assert(m.Location(), qt.Equals, "another location")
 }
 
+func TestClone(t *testing.T) {
+	c := qt.New(t)
+	rootKey := []byte("secret")
+	m := MustNew(rootKey, []byte("some id"), "a location", macaroon.LatestVersion)
+
+	caveats := map[string]bool{
+		"a caveat": true,
+	}
+	for cav := range caveats {
+		m.AddFirstPartyCaveat([]byte(cav))
+	}
+
+	m1 := m.Clone()
+
+	c.Assert(m.Location(), qt.Equals, "a location")
+	c.Assert(m.Caveats()[0].Location, qt.Equals, "")
+	c.Assert(m1.Location(), qt.Equals, "a location")
+	c.Assert(m1.Caveats()[0].Location, qt.Equals, "")
+
+	// Modify the caveat, causes a change to m, but not m1
+	m.SetLocation("new location")
+	m.Caveats()[0].Location = "mars"
+
+	c.Assert(m.Location(), qt.Equals, "new location")
+	c.Assert(m.Caveats()[0].Location, qt.Equals, "mars")
+	c.Assert(m1.Location(), qt.Equals, "a location")
+	c.Assert(m1.Caveats()[0].Location, qt.Equals, "")
+
+}
+
 var equalTests = []struct {
 	about  string
 	m1, m2 macaroonSpec
