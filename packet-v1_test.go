@@ -86,7 +86,7 @@ func truncate(d string) string {
 func TestAsciiHex(t *testing.T) {
 	c := qt.New(t)
 	for b := 0; b < 256; b++ {
-		n, err := strconv.ParseInt(string(b), 16, 8)
+		n, err := strconv.ParseInt(string(byte(b)), 16, 8)
 		value, ok := asciiHex(byte(b))
 		if err != nil || unicode.IsUpper(rune(b)) {
 			c.Assert(ok, qt.Equals, false)
